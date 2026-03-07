@@ -36,7 +36,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use("/static", express.static(path.join(__dirname, "public")));
 
-const SESSION_COOKIE_NAME = "seam_dashboard_session";
+const SESSION_COOKIE_NAME = "taptic_dashboard_session";
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const sessions = new Map();
 const socketPresenceById = new Map();
@@ -258,6 +258,10 @@ const isLocalDatabase = /(localhost|127\.0\.0\.1)/i.test(databaseUrl);
 const pool = new Pool({
 	connectionString: databaseUrl,
 	ssl: isLocalDatabase ? false : { rejectUnauthorized: false },
+	max: 20,
+	min: 2,
+	idleTimeoutMillis: 30000,
+	connectionTimeoutMillis: 5000,
 });
 
 function generateToken() {
@@ -368,16 +372,19 @@ async function renderErrorPage(title, message) {
 	const template = await getErrorTemplate();
 	return template
 		.replace("__ERROR_TITLE__", escapeHtml(title))
-		.replace("__ERROR_TITLE__", escapeHtml(title))
 		.replace("__ERROR_MESSAGE__", escapeHtml(message));
 }
 
-async function renderTeamSuccessPage(teamName, users) {
+const EXTENSION_ID = process.env.EXTENSION_ID || "nhbihphmembphkpkhfoodacaeelhhmai";
+
+async function renderTeamSuccessPage(teamName, users, serverUrl = "") {
 	const template = await getTeamSuccessTemplate();
 
 	const userRows = users
 		.map(
-			(user) => `
+			(user) => {
+				const autoSetupUrl = `chrome-extension://${EXTENSION_ID}/options.html?username=${encodeURIComponent(user.username)}&team=${encodeURIComponent(teamName)}&token=${encodeURIComponent(user.token)}&serverUrl=${encodeURIComponent(serverUrl)}`;
+				return `
             <tr class="border-b border-white/10 table-row-hover" style="color: var(--color-text-main);">
               <td class="px-4 py-3">${escapeHtml(user.username)}</td>
               <td class="px-4 py-3">
@@ -388,9 +395,23 @@ async function renderTeamSuccessPage(teamName, users) {
                 </span>
               </td>
               <td class="px-4 py-3">
-                <code class="text-xs" style="color: var(--color-accent);">${escapeHtml(user.token)}</code>
+                <div class="space-y-2">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <code class="text-xs flex-1 min-w-[200px] break-all" style="color: var(--color-accent);" data-token="${escapeHtml(user.token)}">${escapeHtml(user.token)}</code>
+                    <button type="button" class="copy-token-btn px-2 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap" data-token="${escapeHtml(user.token)}" style="background: var(--color-accent-glow); color: var(--color-accent); border: 1px solid var(--color-accent); cursor: pointer;">Copy</button>
+                  </div>
+                  <p class="text-xs italic" style="color: var(--color-text-muted);">⚠️ This is the last time you will see this token</p>
+                  <div>
+                    <p class="text-xs mb-1" style="color: var(--color-text-muted);">Auto-setup link for team members:</p>
+                    <a href="${autoSetupUrl}" class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors" style="background: var(--color-screen-btn-bg); color: var(--color-screen-btn-text); border: 1px solid var(--color-screen-btn-border);">
+                      <i class="ph ph-download"></i>
+                      Auto-Setup Link
+                    </a>
+                  </div>
+                </div>
               </td>
-            </tr>`,
+            </tr>`;
+			}
 		)
 		.join("");
 
@@ -620,7 +641,88 @@ app.post("/teams/new", async (req, res) => {
 		return;
 	}
 
+	// Input validation
+	if (teamName.length > 100) {
+		res
+			.status(400)
+			.send(await renderErrorPage("Create Team Failed", "Team name must be 100 characters or less."));
+		return;
+	}
+
+	if (leaderUsername.length > 100) {
+		res
+			.status(400)
+			.send(
+				await renderErrorPage("Create Team Failed", "Leader username must be 100 characters or less."),
+			);
+		return;
+	}
+
+	if (!/^[a-zA-Z0-9_-]+$/.test(teamName)) {
+		res
+			.status(400)
+			.send(
+				await renderErrorPage(
+					"Create Team Failed",
+					"Team name can only contain letters, numbers, hyphens, and underscores.",
+				),
+			);
+		return;
+	}
+
+	if (!/^[a-zA-Z0-9_-]+$/.test(leaderUsername)) {
+		res
+			.status(400)
+			.send(
+				await renderErrorPage(
+					"Create Team Failed",
+					"Usernames can only contain letters, numbers, hyphens, and underscores.",
+				),
+			);
+		return;
+	}
+
 	const memberUsernames = parseMemberUsernames(memberUsernamesText, leaderUsername);
+
+	// Validate all member usernames
+	for (const memberUsername of memberUsernames) {
+		if (memberUsername.length > 100) {
+			res
+				.status(400)
+				.send(
+					await renderErrorPage(
+						"Create Team Failed",
+						`Username "${memberUsername}" is too long. Must be 100 characters or less.`,
+					),
+				);
+			return;
+		}
+
+		if (!/^[a-zA-Z0-9_-]+$/.test(memberUsername)) {
+			res
+				.status(400)
+				.send(
+					await renderErrorPage(
+						"Create Team Failed",
+						`Username "${memberUsername}" contains invalid characters. Only letters, numbers, hyphens, and underscores allowed.`,
+					),
+				);
+			return;
+		}
+	}
+
+	if (memberUsernames.length > 50) {
+		res
+			.status(400)
+			.send(
+				await renderErrorPage(
+					"Create Team Failed",
+					"Too many team members. Maximum is 50 members per team.",
+				),
+			);
+		return;
+	}
+
 	const client = await pool.connect();
 
 	try {
@@ -656,8 +758,9 @@ app.post("/teams/new", async (req, res) => {
 		await client.query("COMMIT");
 
 		const allUsers = [leaderResult.rows[0], ...createdMembers];
+		const serverUrl = process.env.PUBLIC_SERVER_URL || `${req.protocol}://${req.get("host")}`;
 
-		res.send(await renderTeamSuccessPage(team.name, allUsers));
+		res.send(await renderTeamSuccessPage(team.name, allUsers, serverUrl));
 	} catch (error) {
 		await client.query("ROLLBACK");
 
@@ -678,7 +781,11 @@ app.post("/teams/new", async (req, res) => {
 			await renderErrorPage("Create Team Failed", "Unexpected error while creating the team."),
 		);
 	} finally {
-		client.release();
+		try {
+			client.release();
+		} catch (releaseError) {
+			console.error("Failed to release database client", releaseError);
+		}
 	}
 });
 
@@ -909,6 +1016,177 @@ io.on("connection", (socket) => {
 		}
 	});
 
+	socket.on("remind_client", async (payload = {}) => {
+		const leaderUsername = String(payload.leaderUsername || "").trim();
+		const leaderSecret = String(payload.leaderSecret || "").trim();
+		const team = String(payload.team || "").trim();
+		const targetUsername = String(payload.targetUsername || "").trim();
+
+		if (!leaderUsername || !leaderSecret || !team || !targetUsername) {
+			socket.emit("remind_status", {
+				status: "error",
+				error: "Missing leader credentials, team, or target username",
+				targetUsername,
+			});
+			return;
+		}
+
+		try {
+			const leaderCheck = await pool.query(
+				`SELECT u.id
+				 FROM users u
+				 JOIN teams t ON t.id = u.team_id
+				 WHERE u.username = $1
+				   AND u.token = $2
+				   AND u.role = 'leader'
+				   AND t.name = $3`,
+				[leaderUsername, leaderSecret, team],
+			);
+
+			if (leaderCheck.rowCount === 0) {
+				socket.emit("remind_status", {
+					status: "error",
+					error: "Invalid leader credentials for reminder",
+					targetUsername,
+				});
+				return;
+			}
+
+			const onlineSocketIds = getOnlineSocketIdsForUser(team, targetUsername);
+			if (onlineSocketIds.length === 0) {
+				socket.emit("remind_status", {
+					status: "offline",
+					targetUsername,
+					error: "Target user is offline",
+				});
+				return;
+			}
+
+			for (const targetSocketId of onlineSocketIds) {
+				io.to(targetSocketId).emit("remindClient", {
+					type: "remindClient",
+					team,
+					message: "Your team leader wants you to stay on task",
+					timestamp: Date.now(),
+				});
+			}
+
+			socket.emit("remind_confirmed", {
+				status: "confirmed",
+				targetUsername,
+			});
+		} catch (error) {
+			console.error("Remind client error", error);
+			socket.emit("remind_status", {
+				status: "error",
+				error: "Unable to send reminder",
+				targetUsername,
+			});
+		}
+	});
+
+	socket.on("getUserTabs", async (payload = {}) => {
+		const leaderUsername = String(payload.leaderUsername || "").trim();
+		const leaderSecret = String(payload.leaderSecret || "").trim();
+		const team = String(payload.team || "").trim();
+		const targetUsername = String(payload.targetUsername || "").trim();
+
+		if (!leaderUsername || !leaderSecret || !team || !targetUsername) {
+			socket.emit("getUserTabs_response", {
+				status: "error",
+				error: "Missing leader credentials, team, or target username",
+				targetUsername,
+			});
+			return;
+		}
+
+		try {
+			const leaderCheck = await pool.query(
+				`SELECT u.id
+				 FROM users u
+				 JOIN teams t ON t.id = u.team_id
+				 WHERE u.username = $1
+				   AND u.token = $2
+				   AND u.role = 'leader'
+				   AND t.name = $3`,
+				[leaderUsername, leaderSecret, team],
+			);
+
+			if (leaderCheck.rowCount === 0) {
+				socket.emit("getUserTabs_response", {
+					status: "error",
+					error: "Invalid leader credentials",
+					targetUsername,
+				});
+				return;
+			}
+
+			const onlineSocketIds = getOnlineSocketIdsForUser(team, targetUsername);
+			if (onlineSocketIds.length === 0) {
+				socket.emit("getUserTabs_response", {
+					status: "error",
+					targetUsername,
+					error: "Target user is offline",
+					tabs: [],
+				});
+				return;
+			}
+
+			// Send request to the first available socket for this user
+			const targetSocketId = onlineSocketIds[0];
+			let responseReceived = false;
+			
+			// Set up a single timeout
+			const responseTimeout = setTimeout(() => {
+				if (responseReceived) return;
+				responseReceived = true;
+				socket.emit("getUserTabs_response", {
+					status: "error",
+					error: "Request timeout - no response from client",
+					targetUsername,
+					tabs: [],
+				});
+			}, 5000);
+
+			// Set up listener for client response
+			const responseHandler = (responsePayload) => {
+				if (responseReceived) return;
+				responseReceived = true;
+				clearTimeout(responseTimeout);
+				
+				console.log("=== INCOMING userTabs JSON ===");
+				console.log(JSON.stringify(responsePayload, null, 2));
+				console.log("==============================");
+				
+				socket.emit("getUserTabs_response", {
+					status: "success",
+					targetUsername,
+					tabs: responsePayload.userTabs || responsePayload.tabs || [],
+				});
+				
+				// Remove the one-time listener
+				socket.off("userTabs_response", responseHandler);
+			};
+			
+			socket.once("userTabs_response", responseHandler);
+
+			// Send request to the client
+			io.to(targetSocketId).emit("getUserTabs_request", {
+				team,
+				requestId: socket.id + Date.now(),
+				responseSocketId: socket.id,
+			});
+		} catch (error) {
+			console.error("Get user tabs error", error);
+			socket.emit("getUserTabs_response", {
+				status: "error",
+				error: "Unable to fetch tabs",
+				targetUsername,
+				tabs: [],
+			});
+		}
+	});
+
 	socket.on("message", (payload) => {
 		if (payload && typeof payload === "object") {
 			registerSocketPresenceFromCredentials(socket, payload).catch((error) => {
@@ -937,6 +1215,30 @@ io.on("connection", (socket) => {
 
 		if (!username || !team || !token || !service) {
 			console.warn(`Invalid heartbeat from ${socket.id}: missing username, team, token, or service`);
+			return;
+		}
+
+		// Input validation
+		if (username.length > 100 || team.length > 100 || service.length > 200) {
+			console.warn(`Invalid heartbeat from ${socket.id}: field too long`);
+			return;
+		}
+
+		if (documentName.length > 500) {
+			console.warn(`Invalid heartbeat from ${socket.id}: document name too long`);
+			return;
+		}
+
+		// Validate character counts are reasonable (prevent abuse)
+		if (
+			charactersAdded < 0 ||
+			charactersRemoved < 0 ||
+			charactersModified < 0 ||
+			charactersAdded > 1000000 ||
+			charactersRemoved > 1000000 ||
+			charactersModified > 1000000
+		) {
+			console.warn(`Invalid heartbeat from ${socket.id}: character counts out of range`);
 			return;
 		}
 
@@ -1002,7 +1304,7 @@ io.on("connection", (socket) => {
 				charactersModified === 0;
 
 			if (noCharacterChanges) {
-				console.log(`heartbeat recieved from ${username}`);
+				console.log(`heartbeat received from ${username}`);
 				return;
 			}
 
@@ -1028,7 +1330,22 @@ io.on("connection", (socket) => {
 	});
 });
 
-const PORT = process.env.PORT || 5173;
+const PORT = process.env.PORT || 8001;
+
+// Clean up expired sessions every 5 minutes
+setInterval(() => {
+	const now = Date.now();
+	const expiredSessions = [];
+	for (const [sessionId, session] of sessions.entries()) {
+		if (session.expiresAt < now) {
+			expiredSessions.push(sessionId);
+		}
+	}
+	expiredSessions.forEach((sessionId) => sessions.delete(sessionId));
+	if (expiredSessions.length > 0) {
+		console.log(`Cleaned up ${expiredSessions.length} expired sessions`);
+	}
+}, 5 * 60 * 1000);
 
 async function startServer() {
 	await initializeDatabase();

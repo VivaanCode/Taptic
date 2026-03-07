@@ -65,7 +65,7 @@
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
             <div class="glass-panel rounded-2xl p-6 flex flex-col justify-center relative overflow-hidden">
                 <div class="absolute top-0 right-0 p-4 opacity-20">
-                    <i class="ph-fill ph-users-three kpi-icon" style="color: var(--color-kpi-members);"></i>
+                    <i class="ph ph-users-three kpi-icon"></i>
                 </div>
                 <span class="text-sm font-medium uppercase tracking-wider mb-1" style="color: var(--color-text-muted);">Team Members</span>
                 <strong class="text-3xl font-bold" style="color: var(--color-text-strong);" id="stat-members">0</strong>
@@ -73,7 +73,7 @@
 
             <div class="glass-panel rounded-2xl p-6 flex flex-col justify-center relative overflow-hidden">
                 <div class="absolute top-0 right-0 p-4 opacity-20">
-                    <i class="ph-fill ph-heartbeat kpi-icon" style="color: var(--color-kpi-heartbeats);"></i>
+                    <i class="ph ph-heartbeat kpi-icon"></i>
                 </div>
                 <span class="text-sm font-medium uppercase tracking-wider mb-1" style="color: var(--color-text-muted);">Total Heartbeats</span>
                 <strong class="text-3xl font-bold" style="color: var(--color-text-strong);" id="stat-heartbeats">0</strong>
@@ -81,7 +81,7 @@
 
             <div class="glass-panel rounded-2xl p-6 flex flex-col justify-center relative overflow-hidden">
                 <div class="absolute top-0 right-0 p-4 opacity-20">
-                    <i class="ph-fill ph-pencil-simple-line kpi-icon" style="color: var(--color-kpi-chars);"></i>
+                    <i class="ph ph-pencil-simple-line kpi-icon"></i>
                 </div>
                 <span class="text-sm font-medium uppercase tracking-wider mb-1" style="color: var(--color-text-muted);">Total Char Activity</span>
                 <strong class="text-3xl font-bold" style="color: var(--color-text-strong);" id="stat-chars">0</strong>
@@ -89,7 +89,7 @@
 
             <div class="glass-panel rounded-2xl p-6 flex flex-col justify-center relative overflow-hidden">
                 <div class="absolute top-0 right-0 p-4 opacity-20">
-                    <i class="ph-fill ph-stack kpi-icon" style="color: var(--color-kpi-services);"></i>
+                    <i class="ph ph-stack kpi-icon"></i>
                 </div>
                 <span class="text-sm font-medium uppercase tracking-wider mb-1" style="color: var(--color-text-muted);">Services Used</span>
                 <strong class="text-3xl font-bold" style="color: var(--color-text-strong);" id="stat-services">0</strong>
@@ -97,11 +97,21 @@
 
             <div class="glass-panel rounded-2xl p-6 flex flex-col justify-center relative overflow-hidden">
                 <div class="absolute top-0 right-0 p-4 opacity-20">
-                    <i class="ph-fill ph-trend-up kpi-icon" style="color: var(--color-kpi-peak);"></i>
+                    <i class="ph ph-trend-up kpi-icon"></i>
                 </div>
                 <span class="text-sm font-medium uppercase tracking-wider mb-1" style="color: var(--color-text-muted);">Peak Daily Activity</span>
                 <strong class="text-3xl font-bold" style="color: var(--color-text-strong);" id="stat-peak">0</strong>
                 <span class="text-xs mt-1" style="color: var(--color-kpi-peak);" id="stat-peak-date">...</span>
+            </div>
+        </div>
+
+        <div id="screenshot-request-state" class="hidden mb-6 rounded-lg p-3 screenshot-request-state">
+            <div class="flex items-center justify-between text-xs mb-2">
+                <span id="screenshot-request-message" style="color: var(--color-text-strong);">Requesting screenshot...</span>
+                <span id="screenshot-request-timer" style="color: var(--color-text-muted);">0.0s / 10.0s</span>
+            </div>
+            <div class="screenshot-request-track">
+                <div id="screenshot-request-bar" class="screenshot-request-bar" style="width: 0%;"></div>
             </div>
         </div>
 
@@ -135,7 +145,7 @@
                             <th class="p-4 font-medium text-right" style="color: var(--color-kpi-modified);">Modified</th>
                             <th class="p-4 font-medium text-right" style="color: var(--color-text-strong);">Total Activity</th>
                             <th class="p-4 font-medium text-right" style="color: var(--color-kpi-peak);">Efficiency*</th>
-                            <th class="p-4 font-medium text-right">Screen</th>
+                            <th class="p-4 font-medium text-right">DETAILS</th>
                         </tr>
                     </thead>
                     <tbody id="user-table-body" class="divide-y divide-white/5"></tbody>
@@ -159,9 +169,85 @@
             <div class="rounded-xl overflow-hidden border border-white/10 bg-black/30">
                 <img id="screenshot-image" class="w-full h-auto max-h-[70vh] object-contain mx-auto" alt="Screenshot preview" />
             </div>
-            <div class="mt-3 text-xs flex flex-col gap-1" style="color: var(--color-text-muted);">
+            <div class="mt-3 text-xs flex flex-col gap-2" style="color: var(--color-text-muted);">
                 <span id="screenshot-meta">No screenshot loaded yet.</span>
-                <a id="screenshot-link" href="#" target="_blank" rel="noopener noreferrer" class="truncate hover:underline" style="color: var(--color-accent);"></a>
+                <div id="screenshot-page-info" class="flex flex-col gap-1">
+                    <span id="screenshot-page-title" class="font-medium" style="color: var(--color-text-strong);"></span>
+                    <a id="screenshot-page-url" href="#" target="_blank" rel="noopener noreferrer" class="truncate hover:underline" style="color: var(--color-accent);"></a>
+                </div>
+                <span class="italic" style="color: var(--color-text-muted); opacity: 0.7;">Screenshots expire in 1 hour</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="detailed-view-modal" class="hidden fixed inset-0 z-50 items-center justify-center p-4 screenshot-modal-overlay">
+        <div class="glass-panel w-full max-w-5xl rounded-2xl p-4 md:p-6 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-semibold flex items-center gap-2" style="color: var(--color-text-strong);">
+                    <i class="ph-fill ph-user-focus"></i>
+                    <span id="detailed-view-username">User Details</span>
+                </h3>
+                <button id="detailed-view-close" class="screen-btn px-3 py-1.5" type="button">Close</button>
+            </div>
+            
+            <div class="space-y-6">
+                <!-- User Info Section -->
+                <div class="glass-panel-inner rounded-xl p-4">
+                    <div class="flex items-start gap-4">
+                        <div id="detailed-view-avatar" class="w-16 h-16 rounded-full bg-gradient-to-br flex items-center justify-center text-xl font-bold"></div>
+                        <div class="flex-1">
+                            <div class="flex items-center gap-3 mb-2">
+                                <h4 class="text-lg font-semibold" style="color: var(--color-text-strong);" id="detailed-view-user-name">User</h4>
+                                <span id="detailed-view-status" class="inline-flex items-center gap-1 text-sm presence-online">
+                                    <i class="ph-fill ph-circle presence-icon presence-online"></i>
+                                    Online
+                                </span>
+                            </div>
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                                <div>
+                                    <span class="block" style="color: var(--color-text-muted);">Role</span>
+                                    <span id="detailed-view-role" class="font-medium" style="color: var(--color-text-strong);">Member</span>
+                                </div>
+                                <div>
+                                    <span class="block" style="color: var(--color-text-muted);">Total Activity</span>
+                                    <span id="detailed-view-activity" class="font-medium" style="color: var(--color-text-strong);">0min</span>
+                                </div>
+                                <div>
+                                    <span class="block" style="color: var(--color-text-muted);">Heartbeats</span>
+                                    <span id="detailed-view-heartbeats" class="font-medium" style="color: var(--color-text-strong);">0</span>
+                                </div>
+                                <div>
+                                    <span class="block" style="color: var(--color-text-muted);">Efficiency</span>
+                                    <span id="detailed-view-efficiency" class="font-medium" style="color: var(--color-text-strong);">0.00/hb</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Action Buttons -->
+                    <div class="flex items-center gap-3 mt-4 pt-4 border-t border-white/10">
+                        <button type="button" class="screen-btn" id="detailed-view-screenshot-btn" data-action="see-screen">
+                            <i class="ph ph-monitor"></i> See Screen
+                        </button>
+                        <button type="button" class="remind-btn" id="detailed-view-remind-btn" data-action="remind" title="Send reminder to stay on task">
+                            <i class="ph ph-bell remind-icon"></i>
+                            <span class="remind-spinner hidden"><i class="ph ph-circle-notch animate-spin"></i></span>
+                            <span class="remind-label">Remind to Stay on Task</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Browser Tabs Section -->
+                <div class="glass-panel-inner rounded-xl p-4">
+                    <h4 class="text-base font-semibold mb-4 flex items-center gap-2" style="color: var(--color-text-strong);">
+                        <i class="ph-fill ph-browser"></i>
+                        Browser Tabs
+                        <span class="text-xs px-2 py-0.5 rounded-full" style="background: var(--color-accent-subtle); color: var(--color-accent);" id="tab-count">0</span>
+                    </h4>
+                    <div id="detailed-view-tabs" class="space-y-2">
+                        <p class="text-sm text-center py-8" style="color: var(--color-text-muted);">Loading tabs...</p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -170,6 +256,8 @@
         const leaderCredentials = __LEADER_CREDENTIALS__;
         const SOCKET_MAX_REFRESH_RATE_MS = 1000;
         const FALLBACK_REFRESH_INTERVAL_MS = 30000;
+        const SCREENSHOT_REQUEST_TIMEOUT_MS = 10000;
+        const SCREENSHOT_PROGRESS_TICK_MS = 100;
 
         let teamActivityChartInstance = null;
         let userContributionChartInstance = null;
@@ -181,34 +269,64 @@
         let currentTeamName = "";
         let latestUsers = [];
         let onlineUsernames = new Set();
+        let screenshotRequestState = null;
+        let remindRequestStates = new Map();
+        let detailedViewUsername = null;
+        let detailedViewUserData = null;
+        let detailedViewTabsInterval = null;
+        const DETAILED_VIEW_TABS_POLL_MS = 3000;
+        
+        const avatarColors = [
+            ['#8b5cf6', '#6366f1'],
+            ['#a855f7', '#7c3aed'],
+            ['#c026d3', '#9333ea'],
+            ['#db2777', '#be185d'],
+            ['#e11d48', '#dc2626'],
+            ['#f97316', '#ea580c'],
+            ['#eab308', '#ca8a04'],
+            ['#84cc16', '#65a30d'],
+            ['#10b981', '#059669'],
+            ['#14b8a6', '#0d9488'],
+        ];
+        
+        const getUserAvatarColors = (username) => {
+            const hash = String(username || '').split('').reduce((acc, char) => {
+                return char.charCodeAt(0) + ((acc << 5) - acc);
+            }, 0);
+            const index = Math.abs(hash) % avatarColors.length;
+            return avatarColors[index];
+        };
 
         const socket = io({ transports: ["websocket", "polling"] });
 
-        const getThemeVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+        const getThemeVar = (name, fallback = "") => {
+            const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+            return value || fallback;
+        };
 
         const getChartPalette = () => {
             return {
-                grid: getThemeVar("--color-chart-grid"),
-                line: getThemeVar("--color-chart-line"),
-                linePoint: getThemeVar("--color-chart-line-point"),
-                lineFillStart: getThemeVar("--color-chart-line-fill-start"),
-                lineFillEnd: getThemeVar("--color-chart-line-fill-end"),
-                tooltipBg: getThemeVar("--color-chart-tooltip-bg"),
-                tooltipBorder: getThemeVar("--color-chart-tooltip-border"),
-                tooltipBody: getThemeVar("--color-chart-tooltip-body"),
+                grid: getThemeVar("--color-chart-grid", "rgba(255, 255, 255, 0.06)"),
+                line: getThemeVar("--color-chart-line", "#2dd4bf"),
+                linePoint: getThemeVar("--color-chart-line-point", "#14b8a6"),
+                lineFillStart: getThemeVar("--color-chart-line-fill-start", "rgba(45, 212, 191, 0.28)"),
+                lineFillEnd: getThemeVar("--color-chart-line-fill-end", "rgba(45, 212, 191, 0.04)"),
+                tooltipBg: getThemeVar("--color-chart-tooltip-bg", "rgba(2, 6, 23, 0.95)"),
+                tooltipBorder: getThemeVar("--color-chart-tooltip-border", "rgba(148, 163, 184, 0.2)"),
+                tooltipBody: getThemeVar("--color-chart-tooltip-body", "#e2e8f0"),
                 barColors: [
-                    getThemeVar("--color-chart-bar-1"),
-                    getThemeVar("--color-chart-bar-2"),
-                    getThemeVar("--color-chart-bar-3"),
-                    getThemeVar("--color-chart-bar-4"),
-                    getThemeVar("--color-chart-bar-5"),
+                    getThemeVar("--color-chart-bar-1", "rgba(15, 118, 110, 0.75)"),
+                    getThemeVar("--color-chart-bar-2", "rgba(17, 94, 89, 0.75)"),
+                    getThemeVar("--color-chart-bar-3", "rgba(19, 78, 74, 0.75)"),
+                    getThemeVar("--color-chart-bar-4", "rgba(21, 128, 61, 0.75)"),
+                    getThemeVar("--color-chart-bar-5", "rgba(4, 120, 87, 0.75)"),
                 ],
                 barBorders: [
-                    getThemeVar("--color-chart-bar-border-1"),
-                    getThemeVar("--color-chart-bar-border-2"),
-                    getThemeVar("--color-chart-bar-border-3"),
-                    getThemeVar("--color-chart-bar-border-4"),
-                    getThemeVar("--color-chart-bar-border-5"),
+                    getThemeVar("--color-chart-bar-border-1", "rgba(15, 118, 110, 1)"),
+                    getThemeVar("--color-chart-bar-border-2", "rgba(17, 94, 89, 1)"),
+                    getThemeVar("--color-chart-bar-border-3", "rgba(19, 78, 74, 1)"),
+                    getThemeVar("--color-chart-bar-border-4", "rgba(21, 128, 61, 1)"),
+                    getThemeVar("--color-chart-bar-border-5", "rgba(4, 120, 87, 1)"),
                 ],
             };
         };
@@ -283,6 +401,100 @@
             el.classList.add("hidden");
         };
 
+        const clearScreenshotRequestState = () => {
+            if (screenshotRequestState && screenshotRequestState.timeoutId) {
+                window.clearTimeout(screenshotRequestState.timeoutId);
+            }
+
+            if (screenshotRequestState && screenshotRequestState.intervalId) {
+                window.clearInterval(screenshotRequestState.intervalId);
+            }
+
+            screenshotRequestState = null;
+        };
+
+        const hideScreenshotRequestUi = () => {
+            const stateEl = document.getElementById("screenshot-request-state");
+            const barEl = document.getElementById("screenshot-request-bar");
+            const messageEl = document.getElementById("screenshot-request-message");
+            const timerEl = document.getElementById("screenshot-request-timer");
+
+            barEl.style.width = "0%";
+            barEl.classList.remove("is-failed");
+            messageEl.textContent = "Requesting screenshot...";
+            messageEl.style.color = "var(--color-text-strong)";
+            timerEl.textContent = "0.0s / 10.0s";
+            stateEl.classList.add("hidden");
+        };
+
+        const failScreenshotRequest = (message) => {
+            const stateEl = document.getElementById("screenshot-request-state");
+            const barEl = document.getElementById("screenshot-request-bar");
+            const messageEl = document.getElementById("screenshot-request-message");
+            const timerEl = document.getElementById("screenshot-request-timer");
+
+            clearScreenshotRequestState();
+
+            barEl.style.width = "100%";
+            barEl.classList.add("is-failed");
+            messageEl.textContent = message;
+            messageEl.style.color = "var(--color-danger-text)";
+            timerEl.textContent = "failed";
+            stateEl.classList.remove("hidden");
+
+            showDashboardError(message);
+        };
+
+        const startScreenshotRequestLoading = (username) => {
+            clearScreenshotRequestState();
+
+            const normalizedUsername = normalizeUsername(username);
+            const stateEl = document.getElementById("screenshot-request-state");
+            const barEl = document.getElementById("screenshot-request-bar");
+            const messageEl = document.getElementById("screenshot-request-message");
+            const timerEl = document.getElementById("screenshot-request-timer");
+            const startedAt = Date.now();
+
+            messageEl.textContent = `Requesting screenshot from ${username}...`;
+            messageEl.style.color = "var(--color-text-strong)";
+            timerEl.textContent = "0.0s / 10.0s";
+            barEl.classList.remove("is-failed");
+            barEl.style.width = "0%";
+            stateEl.classList.remove("hidden");
+
+            const intervalId = window.setInterval(() => {
+                const elapsedMs = Date.now() - startedAt;
+                const percent = Math.min(100, (elapsedMs / SCREENSHOT_REQUEST_TIMEOUT_MS) * 100);
+                barEl.style.width = `${percent}%`;
+                timerEl.textContent = `${(elapsedMs / 1000).toFixed(1)}s / 10.0s`;
+            }, SCREENSHOT_PROGRESS_TICK_MS);
+
+            const timeoutId = window.setTimeout(() => {
+                failScreenshotRequest(`Screenshot request failed: ${username} did not respond within 10 seconds.`);
+            }, SCREENSHOT_REQUEST_TIMEOUT_MS);
+
+            screenshotRequestState = {
+                username: normalizedUsername,
+                intervalId,
+                timeoutId,
+            };
+        };
+
+        const completeScreenshotRequestIfMatching = (username) => {
+            if (!screenshotRequestState) {
+                return;
+            }
+
+            const normalizedUsername = normalizeUsername(username);
+            if (normalizedUsername && normalizedUsername !== screenshotRequestState.username) {
+                return;
+            }
+
+            clearScreenshotRequestState();
+            hideScreenshotRequestUi();
+            clearDashboardError();
+        };
+
         const renderUserTable = (users) => {
             const tbody = document.getElementById("user-table-body");
             let tableHtml = "";
@@ -292,27 +504,30 @@
             } else {
                 users.forEach((user) => {
                     const heartbeatCount = Number(user.heartbeat_count || 0);
-                    const efficiency = heartbeatCount > 0 ? Math.round(Number(user.total_activity || 0) / heartbeatCount) : 0;
+                    const efficiency = heartbeatCount > 0 ? (Number(user.total_activity || 0) / heartbeatCount).toFixed(2) : "0.00";
                     const roleLabel = toRoleLabel(user.role);
                     const roleClass = roleLabel === "Leader" ? "role-pill role-pill-leader" : "role-pill";
                     const online = isUserOnline(user);
                     const statusLabel = online ? "Online" : "Offline";
                     const presenceClass = online ? "presence-online" : "presence-offline";
+                    const [avatarStart, avatarEnd] = getUserAvatarColors(user.username);
 
                     const actionHtml = online
-                        ? `<button type="button" class="screen-btn" data-action="see-screen" data-username="${escapeHtml(user.username)}">See Screen</button>`
+                        ? `<button type="button" class="screen-btn" data-action="detailed-view" data-username="${escapeHtml(user.username)}">
+                            <i class="ph ph-user-focus"></i> Open Detailed View
+                           </button>`
                         : `<span class="text-xs" style="color: var(--color-text-muted);">Unavailable</span>`;
 
                     tableHtml += `
                     <tr class="table-row-hover transition-colors group">
                         <td class="p-4 font-medium" style="color: var(--color-text-strong);">
                             <div class="flex items-center gap-3">
-                                <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-xs font-bold">
+                                <div class="w-8 h-8 rounded-full bg-gradient-to-br flex items-center justify-center text-xs font-bold" style="background: linear-gradient(135deg, ${avatarStart}, ${avatarEnd});">
                                     ${escapeHtml(String(user.username || "").slice(0, 2).toUpperCase() || "??")}
                                 </div>
                                 <div class="flex items-center gap-2">
                                     <span>${escapeHtml(user.username)}</span>
-                                    <span class="inline-flex items-center gap-1 text-xs" style="color: var(--color-text-muted);">
+                                    <span class="inline-flex items-center gap-1 text-xs ${presenceClass}">
                                         <i class="ph-fill ph-circle presence-icon ${presenceClass}"></i>
                                         ${statusLabel}
                                     </span>
@@ -329,7 +544,7 @@
                         <td class="p-4 text-right font-mono" style="color: var(--color-kpi-removed);">${formatNumber(user.characters_removed)}</td>
                         <td class="p-4 text-right font-mono" style="color: var(--color-kpi-modified);">${formatNumber(user.characters_modified)}</td>
                         <td class="p-4 text-right font-bold font-mono" style="color: var(--color-text-strong);">${formatNumber(user.total_activity)}</td>
-                        <td class="p-4 text-right font-mono" style="color: var(--color-kpi-peak);">${formatNumber(efficiency)}/hb</td>
+                        <td class="p-4 text-right font-mono" style="color: var(--color-kpi-peak);">${efficiency}/hb</td>
                         <td class="p-4 text-right">${actionHtml}</td>
                     </tr>`;
                 });
@@ -500,15 +715,16 @@
             }
 
             screenshotImage.src = imageUrl;
-            screenshotLink.href = imageUrl;
-            screenshotLink.textContent = imageUrl;
 
             const username = String(payload.username || "unknown").trim();
-            const service = String(payload.service || "unknown").trim();
-            const documentName = String(payload.document_name || "n/a").trim();
+            const pageUrl = String(payload.page_url || payload.url || "#").trim();
+            const pageTitle = String(payload.page_title || "Untitled Page").trim();
             const capturedAt = formatTimestamp(payload.timestamp);
 
-            screenshotMeta.textContent = `User: ${username} | Service: ${service} | Document: ${documentName} | Captured: ${capturedAt}`;
+            document.getElementById("screenshot-page-title").textContent = pageTitle;
+            document.getElementById("screenshot-page-url").href = pageUrl;
+            document.getElementById("screenshot-page-url").textContent = pageUrl;
+            screenshotMeta.textContent = `User: ${username} | Captured: ${capturedAt}`;
 
             screenshotModal.classList.remove("hidden");
             screenshotModal.classList.add("flex");
@@ -518,12 +734,14 @@
             const screenshotModal = document.getElementById("screenshot-modal");
             const screenshotImage = document.getElementById("screenshot-image");
             const screenshotMeta = document.getElementById("screenshot-meta");
-            const screenshotLink = document.getElementById("screenshot-link");
+            const screenshotPageUrl = document.getElementById("screenshot-page-url");
+            const screenshotPageTitle = document.getElementById("screenshot-page-title");
 
             screenshotImage.src = "";
             screenshotMeta.textContent = "No screenshot loaded yet.";
-            screenshotLink.href = "#";
-            screenshotLink.textContent = "";
+            screenshotPageUrl.href = "#";
+            screenshotPageUrl.textContent = "";
+            screenshotPageTitle.textContent = "";
 
             screenshotModal.classList.add("hidden");
             screenshotModal.classList.remove("flex");
@@ -542,6 +760,8 @@
                 return;
             }
 
+            completeScreenshotRequestIfMatching(payload.username);
+
             openScreenshotModal(payload);
         };
 
@@ -556,12 +776,188 @@
                 return;
             }
 
+            startScreenshotRequestLoading(username);
+            clearDashboardError();
+
             socket.emit("request_screenshot", {
                 leaderUsername: leaderCredentials.username,
                 leaderSecret: leaderCredentials.secret,
                 team: currentTeamName,
                 targetUsername: username,
             });
+        };
+        
+        const requestUserReminder = (targetUsername) => {
+            const username = String(targetUsername || "").trim();
+            if (!username) {
+                return;
+            }
+
+            if (!currentTeamName) {
+                showDashboardError("Cannot send reminder because team context is missing.");
+                return;
+            }
+            
+            const normalizedUsername = normalizeUsername(username);
+            remindRequestStates.set(normalizedUsername, { pending: true, timestamp: Date.now() });
+            updateRemindButtonState(username, 'loading');
+            clearDashboardError();
+
+            socket.emit("remind_client", {
+                leaderUsername: leaderCredentials.username,
+                leaderSecret: leaderCredentials.secret,
+                team: currentTeamName,
+                targetUsername: username,
+            });
+        };
+        
+        const updateRemindButtonState = (username, state) => {
+            const buttons = document.querySelectorAll(`button[data-action="remind"][data-username="${username}"]`);
+            buttons.forEach(button => {
+                const icon = button.querySelector('.remind-icon');
+                const spinner = button.querySelector('.remind-spinner');
+                
+                if (state === 'loading') {
+                    icon.classList.add('hidden');
+                    spinner.classList.remove('hidden');
+                    button.disabled = true;
+                } else {
+                    icon.classList.remove('hidden');
+                    spinner.classList.add('hidden');
+                    button.disabled = false;
+                }
+            });
+        };
+
+        const openDetailedView = (targetUsername) => {
+            const username = String(targetUsername || "").trim();
+            if (!username) return;
+            
+            const userData = latestUsers.find(u => normalizeUsername(u.username) === normalizeUsername(username));
+            if (!userData) return;
+            
+            detailedViewUsername = username;
+            detailedViewUserData = userData;
+            
+            const modal = document.getElementById("detailed-view-modal");
+            const [avatarStart, avatarEnd] = getUserAvatarColors(username);
+            
+            // Populate user info
+            document.getElementById("detailed-view-username").textContent = username;
+            document.getElementById("detailed-view-user-name").textContent = username;
+            document.getElementById("detailed-view-avatar").style.background = `linear-gradient(135deg, ${avatarStart}, ${avatarEnd})`;
+            document.getElementById("detailed-view-avatar").textContent = String(username).slice(0, 2).toUpperCase() || "??";
+            
+            const online = isUserOnline(userData);
+            const statusEl = document.getElementById("detailed-view-status");
+            statusEl.className = online ? "inline-flex items-center gap-1 text-sm presence-online" : "inline-flex items-center gap-1 text-sm presence-offline";
+            statusEl.innerHTML = online 
+                ? '<i class="ph-fill ph-circle presence-icon presence-online"></i> Online'
+                : '<i class="ph-fill ph-circle presence-icon presence-offline"></i> Offline';
+            
+            document.getElementById("detailed-view-role").textContent = toRoleLabel(userData.role);
+            document.getElementById("detailed-view-activity").textContent = formatNumber(userData.total_activity);
+            document.getElementById("detailed-view-heartbeats").textContent = formatNumber(userData.heartbeat_count);
+            
+            const heartbeatCount = Number(userData.heartbeat_count || 0);
+            const efficiency = heartbeatCount > 0 ? (Number(userData.total_activity || 0) / heartbeatCount).toFixed(2) : "0.00";
+            document.getElementById("detailed-view-efficiency").textContent = `${efficiency}/hb`;
+            
+            // Show modal
+            modal.classList.remove("hidden");
+            modal.classList.add("flex");
+            
+            // Start polling for tabs
+            requestUserTabs(username);
+            startTabsPolling();
+        };
+
+        const closeDetailedView = () => {
+            const modal = document.getElementById("detailed-view-modal");
+            modal.classList.add("hidden");
+            modal.classList.remove("flex");
+            
+            detailedViewUsername = null;
+            detailedViewUserData = null;
+            stopTabsPolling();
+            
+            // Clear tabs display
+            document.getElementById("detailed-view-tabs").innerHTML = '<p class="text-sm text-center py-8" style="color: var(--color-text-muted);">Loading tabs...</p>';
+        };
+
+        const requestUserTabs = (targetUsername) => {
+            const username = String(targetUsername || "").trim();
+            if (!username) return;
+            
+            if (!currentTeamName) return;
+            
+            socket.emit("getUserTabs", {
+                leaderUsername: leaderCredentials.username,
+                leaderSecret: leaderCredentials.secret,
+                team: currentTeamName,
+                targetUsername: username,
+            });
+        };
+
+        const renderUserTabs = (tabs) => {
+            const tabsContainer = document.getElementById("detailed-view-tabs");
+            const tabCount = document.getElementById("tab-count");
+            
+            if (!Array.isArray(tabs) || tabs.length === 0) {
+                tabsContainer.innerHTML = '<p class="text-sm text-center py-8" style="color: var(--color-text-muted);">No tabs found</p>';
+                tabCount.textContent = '0';
+                return;
+            }
+            
+            tabCount.textContent = String(tabs.length);
+            
+            let html = '';
+            tabs.forEach(tab => {
+                const isActive = tab.tabState === 'active';
+                const stateClass = isActive ? 'border-l-4' : 'border-l-2';
+                const stateBorderColor = isActive ? 'var(--color-accent)' : 'var(--color-border)';
+                const stateColor = isActive ? 'var(--color-accent)' : 'var(--color-text-muted)';
+                const stateLabel = isActive ? 'Active' : 'Inactive';
+                const stateIcon = isActive ? 'ph-check-circle' : 'ph-circle';
+                
+                html += `
+                    <div class="glass-panel-inner rounded-lg p-3 ${stateClass} transition-all hover:bg-white/5" style="border-left-color: ${stateBorderColor};">
+                        <div class="flex items-start gap-3">
+                            <div class="flex-shrink-0 mt-0.5">
+                                <i class="ph-fill ph-browser-chrome text-xl" style="color: var(--color-text-muted);"></i>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-start justify-between gap-2 mb-1">
+                                    <h5 class="font-medium text-sm truncate" style="color: var(--color-text-strong);" title="${escapeHtml(tab.title || 'Untitled')}">${escapeHtml(tab.title || 'Untitled')}</h5>
+                                    <span class="flex-shrink-0 inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full" style="background: ${isActive ? 'var(--color-accent-subtle)' : 'var(--color-glass-dark)'}; color: ${stateColor};">
+                                        <i class="ph-fill ${stateIcon}"></i>
+                                        ${stateLabel}
+                                    </span>
+                                </div>
+                                <a href="${escapeHtml(tab.url || '#')}" target="_blank" rel="noopener noreferrer" class="text-xs truncate block hover:underline" style="color: var(--color-text-muted);" title="${escapeHtml(tab.url || '')}">${escapeHtml(tab.url || '')}</a>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            tabsContainer.innerHTML = html;
+        };
+
+        const startTabsPolling = () => {
+            stopTabsPolling();
+            detailedViewTabsInterval = setInterval(() => {
+                if (detailedViewUsername) {
+                    requestUserTabs(detailedViewUsername);
+                }
+            }, DETAILED_VIEW_TABS_POLL_MS);
+        };
+
+        const stopTabsPolling = () => {
+            if (detailedViewTabsInterval) {
+                clearInterval(detailedViewTabsInterval);
+                detailedViewTabsInterval = null;
+            }
         };
 
         const initDashboard = (dashboardData) => {
@@ -711,23 +1107,88 @@
             }
 
             if (event.status === "offline") {
-                showDashboardError(`${event.targetUsername || "User"} is offline. Screenshot cannot be requested.`);
+                failScreenshotRequest(`${event.targetUsername || "User"} is offline. Screenshot cannot be requested.`);
                 return;
             }
 
             if (event.status === "error") {
-                showDashboardError(event.error || "Unable to request screenshot right now.");
+                failScreenshotRequest(event.error || "Unable to request screenshot right now.");
+            }
+        });
+        
+        socket.on("remind_confirmed", (event) => {
+            if (!event || typeof event !== "object") {
+                return;
+            }
+            
+            const targetUsername = String(event.targetUsername || "").trim();
+            const normalizedUsername = normalizeUsername(targetUsername);
+            
+            updateRemindButtonState(targetUsername, 'idle');
+            remindRequestStates.delete(normalizedUsername);
+            
+            setTimeout(() => {
+                socket.emit("request_screenshot", {
+                    leaderUsername: leaderCredentials.username,
+                    leaderSecret: leaderCredentials.secret,
+                    team: currentTeamName,
+                    targetUsername: targetUsername,
+                });
+            }, 500);
+        });
+        
+        socket.on("remind_status", (event) => {
+            if (!event || typeof event !== "object") {
+                return;
+            }
+            
+            const targetUsername = String(event.targetUsername || "").trim();
+            const normalizedUsername = normalizeUsername(targetUsername);
+            
+            updateRemindButtonState(targetUsername, 'idle');
+            remindRequestStates.delete(normalizedUsername);
+            
+            if (event.status === "error") {
+                showDashboardError(event.error || "Unable to send reminder right now.");
+            }
+        });
+
+        socket.on("getUserTabs_response", (event) => {
+            if (!event || typeof event !== "object") {
+                return;
+            }
+            
+            if (event.status === "error") {
+                document.getElementById("detailed-view-tabs").innerHTML = `<p class="text-sm text-center py-8" style="color: var(--color-text-muted);">${escapeHtml(event.error || "Unable to fetch tabs")}</p>`;
+                return;
+            }
+            
+            if (Array.isArray(event.tabs)) {
+                renderUserTabs(event.tabs);
             }
         });
 
         document.getElementById("user-table-body").addEventListener("click", (event) => {
-            const button = event.target.closest("button[data-action='see-screen']");
-            if (!button) {
+            const detailedViewButton = event.target.closest("button[data-action='detailed-view']");
+            if (detailedViewButton) {
+                const targetUsername = detailedViewButton.getAttribute("data-username");
+                openDetailedView(targetUsername);
                 return;
             }
-
-            const targetUsername = button.getAttribute("data-username");
-            requestUserScreenshot(targetUsername);
+            
+            const seeScreenButton = event.target.closest("button[data-action='see-screen']");
+            if (seeScreenButton) {
+                const targetUsername = seeScreenButton.getAttribute("data-username");
+                requestUserScreenshot(targetUsername);
+                return;
+            }
+            
+            const remindButton = event.target.closest("button[data-action='remind']");
+            if (remindButton) {
+                const targetUsername = remindButton.getAttribute("data-username");
+                requestUserReminder(targetUsername);
+                return;
+            }
         });
 
         document.getElementById("screenshot-modal-close").addEventListener("click", () => {
@@ -737,6 +1198,28 @@
         document.getElementById("screenshot-modal").addEventListener("click", (event) => {
             if (event.target.id === "screenshot-modal") {
                 closeScreenshotModal();
+            }
+        });
+
+        document.getElementById("detailed-view-close").addEventListener("click", () => {
+            closeDetailedView();
+        });
+
+        document.getElementById("detailed-view-modal").addEventListener("click", (event) => {
+            if (event.target.id === "detailed-view-modal") {
+                closeDetailedView();
+            }
+        });
+
+        document.getElementById("detailed-view-screenshot-btn").addEventListener("click", () => {
+            if (detailedViewUsername) {
+                requestUserScreenshot(detailedViewUsername);
+            }
+        });
+
+        document.getElementById("detailed-view-remind-btn").addEventListener("click", () => {
+            if (detailedViewUsername) {
+                requestUserReminder(detailedViewUsername);
             }
         });
 

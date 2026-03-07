@@ -87,10 +87,25 @@ function connectSocket() {
   });
 
   socket.on("connect", () => {
+    console.log("Taptic: Connected to server with socket ID:", socket.id);
+    
+    // Register presence immediately on connect
+    loadSettings((settings) => {
+      if (settings.username && settings.team && settings.token) {
+        socket.emit("register_presence", {
+          username: settings.username,
+          team: settings.team,
+          token: settings.token
+        });
+      }
+    });
+    
+    // Send any pending events
     while (pendingEvents.length > 0) {
       const queued = pendingEvents.shift();
       socket.emit(queued.event, queued.payload);
     }
+    
     // Also send user tabs immediately on connect
     sendUserTabs();
   });
@@ -111,8 +126,30 @@ function connectSocket() {
     });
   });
 
-  socket.on("getUserTabs", () => {
-    sendUserTabs();
+  socket.on("getUserTabs_request", (data) => {
+    console.log("Taptic: Received getUserTabs_request from server", data);
+    chrome.tabs.query({}, (tabs) => {
+      loadSettings((settings) => {
+        const payload = {
+          userTabs: tabs.map(t => ({
+            id: t.id || 0,
+            title: t.title || "Unknown",
+            url: t.url || "",
+            tabState: t.active ? "active" : "inactive"
+          })),
+          username: settings.username || "",
+          team: settings.team || "",
+          token: settings.token || "",
+          requestId: data.requestId || ""
+        };
+        console.log("Taptic: Sending userTabs response back to server", payload);
+        
+        // Send response back to the requesting socket
+        if (data.responseSocketId) {
+          socket.emit("userTabs_response", payload);
+        }
+      });
+    });
   });
 
   socket.on("disconnect", () => {});
@@ -269,7 +306,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
               service: serviceName,
               document_name: msg.meta && msg.meta.document_name ? msg.meta.document_name : "",
               timestamp: Date.now(),
-              tab_url: sender.tab && sender.tab.url ? sender.tab.url : ""
+              page_url: sender.tab && sender.tab.url ? sender.tab.url : "",
+              page_title: sender.tab && sender.tab.title ? sender.tab.title : "Untitled"
             };
             const sentNow = emitOrQueue("message", payload);
             sendResponse({ ok: true, sentNow, url: payload.url });

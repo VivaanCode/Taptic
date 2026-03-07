@@ -32,9 +32,14 @@
         <p class="text-lg" style="color: var(--color-text-strong);">
           Team: <strong>__TEAM_NAME__</strong>
         </p>
-        <p class="mt-2 text-sm" style="color: var(--color-text-muted);">
-          Share each member's token with that user. The leader token is used to log into the dashboard.
-        </p>
+        <div class="mt-3 space-y-2">
+          <p class="text-sm" style="color: var(--color-text-muted);">
+            📋 Share each member's <strong>Auto-Setup Link</strong> with that user—they can open it to instantly configure their extension.
+          </p>
+          <p class="text-sm" style="color: var(--color-text-muted);">
+            🔐 You can also manually copy each member's token to share. The leader token is used to log into the dashboard.
+          </p>
+        </div>
       </div>
 
       <div class="overflow-x-auto rounded-lg border border-white/10">
@@ -79,5 +84,26 @@
       </div>
     </section>
   </main>
+
+  <script>
+    document.querySelectorAll('.copy-token-btn').forEach(button => {
+      button.addEventListener('click', (e) => {
+        e.preventDefault();
+        const token = button.getAttribute('data-token');
+        navigator.clipboard.writeText(token).then(() => {
+          const originalText = button.textContent;
+          button.textContent = '✓ Copied!';
+          button.style.background = 'var(--color-screen-btn-bg-hover)';
+          setTimeout(() => {
+            button.textContent = originalText;
+            button.style.background = '';
+          }, 2000);
+        }).catch(err => {
+          console.error('Failed to copy token:', err);
+          alert('Failed to copy token');
+        });
+      });
+    });
+  </script>
 </body>
 </html>
