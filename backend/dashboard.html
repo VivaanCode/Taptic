@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Team Activity Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/fill/style.css"
+    />
+    <link rel="stylesheet" href="/static/dashboard-theme.css" />
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        glass: {
+                            100: "rgba(255, 255, 255, 0.1)",
+                            200: "rgba(255, 255, 255, 0.05)",
+                        },
+                    },
+                },
+            },
+        };
+    </script>
+</head>
+<body class="theme-page antialiased relative min-h-screen overflow-x-hidden">
+    <div class="fixed top-[-10%] left-[-10%] w-[500px] h-[500px] blob opacity-40 z-0" style="background: var(--color-blob-indigo);"></div>
+    <div class="fixed bottom-[-10%] right-[-10%] w-[600px] h-[600px] blob opacity-30 z-0" style="background: var(--color-blob-teal);"></div>
+    <div class="fixed top-[40%] left-[60%] w-[400px] h-[400px] blob opacity-30 z-0" style="background: var(--color-blob-purple);"></div>
+
+    <div class="relative z-10 container mx-auto px-4 py-8 max-w-7xl">
+        <header class="glass-panel rounded-2xl p-6 mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+                <h1 class="text-3xl font-bold tracking-tight flex items-center gap-2" style="color: var(--color-text-strong);">
+                    <i class="ph-fill ph-chart-line-up"></i>
+                    Team Dashboard
+                </h1>
+                <p class="mt-1" style="color: var(--color-text-muted);">
+                    Welcome, <strong style="color: var(--color-accent);" id="leader-name">...</strong>
+                    (Team: <strong style="color: var(--color-accent);" id="team-name">...</strong>)
+                </p>
+            </div>
+            <div class="flex items-center gap-4 flex-wrap">
+                <span class="text-sm" style="color: var(--color-text-muted);">Last Sync: <span id="last-sync" style="color: var(--color-text-strong);">...</span></span>
+                <button id="logout-btn" class="bg-white/10 hover:bg-white/20 transition-colors border border-white/10 px-5 py-2 rounded-lg text-sm font-medium flex items-center gap-2" style="color: var(--color-text-strong);">
+                    <i class="ph ph-sign-out"></i>
+                    Logout
+                </button>
+            </div>
+        </header>
+
+        <div id="dashboard-error" class="hidden mb-6 rounded-lg px-4 py-3 text-sm alert-danger"></div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+            <div class="glass-panel rounded-2xl p-6 flex flex-col justify-center relative overflow-hidden">
+                <div class="absolute top-0 right-0 p-4 opacity-20">
+                    <i class="ph-fill ph-users-three kpi-icon" style="color: var(--color-kpi-members);"></i>
+                </div>
+                <span class="text-sm font-medium uppercase tracking-wider mb-1" style="color: var(--color-text-muted);">Team Members</span>
+                <strong class="text-3xl font-bold" style="color: var(--color-text-strong);" id="stat-members">0</strong>
+            </div>
+
+            <div class="glass-panel rounded-2xl p-6 flex flex-col justify-center relative overflow-hidden">
+                <div class="absolute top-0 right-0 p-4 opacity-20">
+                    <i class="ph-fill ph-heartbeat kpi-icon" style="color: var(--color-kpi-heartbeats);"></i>
+                </div>
+                <span class="text-sm font-medium uppercase tracking-wider mb-1" style="color: var(--color-text-muted);">Total Heartbeats</span>
+                <strong class="text-3xl font-bold" style="color: var(--color-text-strong);" id="stat-heartbeats">0</strong>
+            </div>
+
+            <div class="glass-panel rounded-2xl p-6 flex flex-col justify-center relative overflow-hidden">
+                <div class="absolute top-0 right-0 p-4 opacity-20">
+                    <i class="ph-fill ph-pencil-simple-line kpi-icon" style="color: var(--color-kpi-chars);"></i>
+                </div>
+                <span class="text-sm font-medium uppercase tracking-wider mb-1" style="color: var(--color-text-muted);">Total Char Activity</span>
+                <strong class="text-3xl font-bold" style="color: var(--color-text-strong);" id="stat-chars">0</strong>
+            </div>
+
+            <div class="glass-panel rounded-2xl p-6 flex flex-col justify-center relative overflow-hidden">
+                <div class="absolute top-0 right-0 p-4 opacity-20">
+                    <i class="ph-fill ph-stack kpi-icon" style="color: var(--color-kpi-services);"></i>
+                </div>
+                <span class="text-sm font-medium uppercase tracking-wider mb-1" style="color: var(--color-text-muted);">Services Used</span>
+                <strong class="text-3xl font-bold" style="color: var(--color-text-strong);" id="stat-services">0</strong>
+            </div>
+
+            <div class="glass-panel rounded-2xl p-6 flex flex-col justify-center relative overflow-hidden">
+                <div class="absolute top-0 right-0 p-4 opacity-20">
+                    <i class="ph-fill ph-trend-up kpi-icon" style="color: var(--color-kpi-peak);"></i>
+                </div>
+                <span class="text-sm font-medium uppercase tracking-wider mb-1" style="color: var(--color-text-muted);">Peak Daily Activity</span>
+                <strong class="text-3xl font-bold" style="color: var(--color-text-strong);" id="stat-peak">0</strong>
+                <span class="text-xs mt-1" style="color: var(--color-kpi-peak);" id="stat-peak-date">...</span>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            <div class="glass-panel rounded-2xl p-6">
+                <h2 class="text-xl font-semibold mb-4" style="color: var(--color-text-strong);">Daily Team Activity (Last 14 Days)</h2>
+                <div class="relative h-72 w-full">
+                    <canvas id="teamActivityChart"></canvas>
+                </div>
+            </div>
+
+            <div class="glass-panel rounded-2xl p-6">
+                <h2 class="text-xl font-semibold mb-4" style="color: var(--color-text-strong);">User Contribution Comparison</h2>
+                <div class="relative h-72 w-full">
+                    <canvas id="userContributionChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-6 overflow-hidden flex flex-col">
+            <h2 class="text-xl font-semibold mb-4" style="color: var(--color-text-strong);">Detailed User Metrics</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b border-white/10 text-sm tracking-wider uppercase" style="color: var(--color-text-muted);">
+                            <th class="p-4 font-medium">Username</th>
+                            <th class="p-4 font-medium">Role</th>
+                            <th class="p-4 font-medium text-right">Heartbeats</th>
+                            <th class="p-4 font-medium text-right" style="color: var(--color-kpi-added);">Added</th>
+                            <th class="p-4 font-medium text-right" style="color: var(--color-kpi-removed);">Removed</th>
+                            <th class="p-4 font-medium text-right" style="color: var(--color-kpi-modified);">Modified</th>
+                            <th class="p-4 font-medium text-right" style="color: var(--color-text-strong);">Total Activity</th>
+                            <th class="p-4 font-medium text-right" style="color: var(--color-kpi-peak);">Efficiency*</th>
+                            <th class="p-4 font-medium text-right">Screen</th>
+                        </tr>
+                    </thead>
+                    <tbody id="user-table-body" class="divide-y divide-white/5"></tbody>
+                </table>
+            </div>
+            <div class="mt-4 flex justify-between items-center text-xs" style="color: var(--color-text-muted);">
+                <span>* Efficiency = Total Activity / Heartbeats (Avg Chars per Heartbeat)</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="screenshot-modal" class="hidden fixed inset-0 z-50 items-center justify-center p-4 screenshot-modal-overlay">
+        <div class="glass-panel w-full max-w-4xl rounded-2xl p-4 md:p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold flex items-center gap-2" style="color: var(--color-text-strong);">
+                    <i class="ph-fill ph-monitor"></i>
+                    Live Screenshot
+                </h3>
+                <button id="screenshot-modal-close" class="screen-btn px-3 py-1.5" type="button">Close</button>
+            </div>
+            <div class="rounded-xl overflow-hidden border border-white/10 bg-black/30">
+                <img id="screenshot-image" class="w-full h-auto max-h-[70vh] object-contain mx-auto" alt="Screenshot preview" />
+            </div>
+            <div class="mt-3 text-xs flex flex-col gap-1" style="color: var(--color-text-muted);">
+                <span id="screenshot-meta">No screenshot loaded yet.</span>
+                <a id="screenshot-link" href="#" target="_blank" rel="noopener noreferrer" class="truncate hover:underline" style="color: var(--color-accent);"></a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const leaderCredentials = __LEADER_CREDENTIALS__;
+        const SOCKET_MAX_REFRESH_RATE_MS = 1000;
+        const FALLBACK_REFRESH_INTERVAL_MS = 30000;
+
+        let teamActivityChartInstance = null;
+        let userContributionChartInstance = null;
+        let isDashboardLoading = false;
+        let queuedRefreshTimeout = null;
+        let refreshRequestedDuringLoad = false;
+        let nextAllowedRefreshAt = 0;
+        let currentTeamId = null;
+        let currentTeamName = "";
+        let latestUsers = [];
+        let onlineUsernames = new Set();
+
+        const socket = io({ transports: ["websocket", "polling"] });
+
+        const getThemeVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+        const getChartPalette = () => {
+            return {
+                grid: getThemeVar("--color-chart-grid"),
+                line: getThemeVar("--color-chart-line"),
+                linePoint: getThemeVar("--color-chart-line-point"),
+                lineFillStart: getThemeVar("--color-chart-line-fill-start"),
+                lineFillEnd: getThemeVar("--color-chart-line-fill-end"),
+                tooltipBg: getThemeVar("--color-chart-tooltip-bg"),
+                tooltipBorder: getThemeVar("--color-chart-tooltip-border"),
+                tooltipBody: getThemeVar("--color-chart-tooltip-body"),
+                barColors: [
+                    getThemeVar("--color-chart-bar-1"),
+                    getThemeVar("--color-chart-bar-2"),
+                    getThemeVar("--color-chart-bar-3"),
+                    getThemeVar("--color-chart-bar-4"),
+                    getThemeVar("--color-chart-bar-5"),
+                ],
+                barBorders: [
+                    getThemeVar("--color-chart-bar-border-1"),
+                    getThemeVar("--color-chart-bar-border-2"),
+                    getThemeVar("--color-chart-bar-border-3"),
+                    getThemeVar("--color-chart-bar-border-4"),
+                    getThemeVar("--color-chart-bar-border-5"),
+                ],
+            };
+        };
+
+        const formatNumber = (num) => new Intl.NumberFormat("en-US").format(Number(num || 0));
+
+        const formatDate = (dateStr) => {
+            const date = new Date(dateStr);
+            if (Number.isNaN(date.getTime())) {
+                return "No data yet";
+            }
+            return new Intl.DateTimeFormat("en-US", {
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+            }).format(date);
+        };
+
+        const formatTimestamp = (value) => {
+            const date = new Date(Number(value || 0));
+            if (Number.isNaN(date.getTime())) {
+                return "Unknown time";
+            }
+
+            return new Intl.DateTimeFormat("en-US", {
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+            }).format(date);
+        };
+
+        const escapeHtml = (unsafe) => {
+            return (unsafe || "").toString()
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/\"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        };
+
+        const toRoleLabel = (role) => {
+            const value = String(role || "member").toLowerCase();
+            return value.charAt(0).toUpperCase() + value.slice(1);
+        };
+
+        const normalizeTeam = (teamName) => String(teamName || "").trim().toLowerCase();
+        const normalizeUsername = (username) => String(username || "").trim().toLowerCase();
+
+        const isSameTeam = (teamNameA, teamNameB) => normalizeTeam(teamNameA) === normalizeTeam(teamNameB);
+
+        const isUserOnline = (user) => {
+            const username = normalizeUsername(user.username);
+            if (!username) {
+                return false;
+            }
+
+            return onlineUsernames.has(username);
+        };
+
+        const showDashboardError = (message) => {
+            const el = document.getElementById("dashboard-error");
+            el.textContent = message;
+            el.classList.remove("hidden");
+        };
+
+        const clearDashboardError = () => {
+            const el = document.getElementById("dashboard-error");
+            el.textContent = "";
+            el.classList.add("hidden");
+        };
+
+        const renderUserTable = (users) => {
+            const tbody = document.getElementById("user-table-body");
+            let tableHtml = "";
+
+            if (!users.length) {
+                tableHtml = '<tr><td colspan="9" class="p-4 text-center" style="color: var(--color-text-muted);">No user data available</td></tr>';
+            } else {
+                users.forEach((user) => {
+                    const heartbeatCount = Number(user.heartbeat_count || 0);
+                    const efficiency = heartbeatCount > 0 ? Math.round(Number(user.total_activity || 0) / heartbeatCount) : 0;
+                    const roleLabel = toRoleLabel(user.role);
+                    const roleClass = roleLabel === "Leader" ? "role-pill role-pill-leader" : "role-pill";
+                    const online = isUserOnline(user);
+                    const statusLabel = online ? "Online" : "Offline";
+                    const presenceClass = online ? "presence-online" : "presence-offline";
+
+                    const actionHtml = online
+                        ? `<button type="button" class="screen-btn" data-action="see-screen" data-username="${escapeHtml(user.username)}">See Screen</button>`
+                        : `<span class="text-xs" style="color: var(--color-text-muted);">Unavailable</span>`;
+
+                    tableHtml += `
+                    <tr class="table-row-hover transition-colors group">
+                        <td class="p-4 font-medium" style="color: var(--color-text-strong);">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-xs font-bold">
+                                    ${escapeHtml(String(user.username || "").slice(0, 2).toUpperCase() || "??")}
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span>${escapeHtml(user.username)}</span>
+                                    <span class="inline-flex items-center gap-1 text-xs" style="color: var(--color-text-muted);">
+                                        <i class="ph-fill ph-circle presence-icon ${presenceClass}"></i>
+                                        ${statusLabel}
+                                    </span>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="p-4" style="color: var(--color-text-soft);">
+                            <span class="px-2 py-1 text-xs font-medium ${roleClass}">
+                                ${escapeHtml(roleLabel)}
+                            </span>
+                        </td>
+                        <td class="p-4 text-right font-mono" style="color: var(--color-text-soft);">${formatNumber(user.heartbeat_count)}</td>
+                        <td class="p-4 text-right font-mono" style="color: var(--color-kpi-added);">${formatNumber(user.characters_added)}</td>
+                        <td class="p-4 text-right font-mono" style="color: var(--color-kpi-removed);">${formatNumber(user.characters_removed)}</td>
+                        <td class="p-4 text-right font-mono" style="color: var(--color-kpi-modified);">${formatNumber(user.characters_modified)}</td>
+                        <td class="p-4 text-right font-bold font-mono" style="color: var(--color-text-strong);">${formatNumber(user.total_activity)}</td>
+                        <td class="p-4 text-right font-mono" style="color: var(--color-kpi-peak);">${formatNumber(efficiency)}/hb</td>
+                        <td class="p-4 text-right">${actionHtml}</td>
+                    </tr>`;
+                });
+            }
+
+            tbody.innerHTML = tableHtml;
+        };
+
+        const buildChartLabels = (daily) => {
+            return daily.map((row) => {
+                const date = new Date(row.day + "T00:00:00");
+                return Number.isNaN(date.getTime()) ? row.day : `${date.getMonth() + 1}/${date.getDate()}`;
+            });
+        };
+
+        const buildDailyData = (daily) => daily.map((row) => Number(row.total_activity || 0));
+        const buildUserData = (users) => users.map((row) => Number(row.total_activity || 0));
+
+        const initializeChartsIfNeeded = (daily, users) => {
+            const palette = getChartPalette();
+
+            Chart.defaults.color = "rgba(255, 255, 255, 0.6)";
+            Chart.defaults.font.family = "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
+
+            const gridOptions = {
+                color: palette.grid,
+                drawBorder: false,
+            };
+
+            if (!teamActivityChartInstance) {
+                const dailyCtx = document.getElementById("teamActivityChart").getContext("2d");
+                const gradientLine = dailyCtx.createLinearGradient(0, 0, 0, 400);
+                gradientLine.addColorStop(0, palette.lineFillStart);
+                gradientLine.addColorStop(1, palette.lineFillEnd);
+
+                teamActivityChartInstance = new Chart(dailyCtx, {
+                    type: "line",
+                    data: {
+                        labels: buildChartLabels(daily),
+                        datasets: [{
+                            label: "Total Character Activity",
+                            data: buildDailyData(daily),
+                            borderColor: palette.line,
+                            backgroundColor: gradientLine,
+                            borderWidth: 2,
+                            pointBackgroundColor: palette.linePoint,
+                            pointBorderColor: palette.line,
+                            pointBorderWidth: 2,
+                            pointRadius: 4,
+                            pointHoverRadius: 6,
+                            tension: 0.4,
+                            fill: true,
+                        }],
+                    },
+                    options: {
+                        animation: {
+                            duration: 900,
+                            easing: "easeOutQuart",
+                        },
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: palette.tooltipBg,
+                                titleColor: "#fff",
+                                bodyColor: palette.tooltipBody,
+                                borderColor: palette.tooltipBorder,
+                                borderWidth: 1,
+                                padding: 10,
+                                displayColors: false,
+                                callbacks: {
+                                    label(context) {
+                                        return "Activity: " + formatNumber(context.raw);
+                                    },
+                                },
+                            },
+                        },
+                        scales: {
+                            y: { grid: gridOptions, border: { display: false } },
+                            x: { grid: gridOptions, border: { display: false } },
+                        },
+                    },
+                });
+            }
+
+            if (!userContributionChartInstance) {
+                const userCtx = document.getElementById("userContributionChart").getContext("2d");
+
+                userContributionChartInstance = new Chart(userCtx, {
+                    type: "bar",
+                    data: {
+                        labels: users.map((user) => user.username),
+                        datasets: [{
+                            label: "Total Activity",
+                            data: buildUserData(users),
+                            backgroundColor: users.map((_, index) => palette.barColors[index % palette.barColors.length]),
+                            borderColor: users.map((_, index) => palette.barBorders[index % palette.barBorders.length]),
+                            borderWidth: 1,
+                            borderRadius: 6,
+                            barPercentage: 0.6,
+                        }],
+                    },
+                    options: {
+                        animation: {
+                            duration: 900,
+                            easing: "easeOutQuart",
+                        },
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: palette.tooltipBg,
+                                titleColor: "#fff",
+                                bodyColor: palette.tooltipBody,
+                                borderColor: palette.tooltipBorder,
+                                borderWidth: 1,
+                                padding: 10,
+                                callbacks: {
+                                    label(context) {
+                                        return formatNumber(context.raw) + " chars";
+                                    },
+                                },
+                            },
+                        },
+                        scales: {
+                            y: { grid: gridOptions, border: { display: false } },
+                            x: { grid: gridOptions, border: { display: false } },
+                        },
+                    },
+                });
+            }
+        };
+
+        const updateCharts = (daily, users) => {
+            initializeChartsIfNeeded(daily, users);
+
+            const palette = getChartPalette();
+            const dailyLabels = buildChartLabels(daily);
+            const dailyValues = buildDailyData(daily);
+            const userLabels = users.map((row) => row.username);
+            const userValues = buildUserData(users);
+
+            teamActivityChartInstance.data.labels = dailyLabels;
+            teamActivityChartInstance.data.datasets[0].data = dailyValues;
+            teamActivityChartInstance.data.datasets[0].borderColor = palette.line;
+            teamActivityChartInstance.data.datasets[0].pointBorderColor = palette.line;
+            teamActivityChartInstance.data.datasets[0].pointBackgroundColor = palette.linePoint;
+            teamActivityChartInstance.update();
+
+            userContributionChartInstance.data.labels = userLabels;
+            userContributionChartInstance.data.datasets[0].data = userValues;
+            userContributionChartInstance.data.datasets[0].backgroundColor = userValues.map((_, index) => palette.barColors[index % palette.barColors.length]);
+            userContributionChartInstance.data.datasets[0].borderColor = userValues.map((_, index) => palette.barBorders[index % palette.barBorders.length]);
+            userContributionChartInstance.update();
+        };
+
+        const openScreenshotModal = (payload) => {
+            const screenshotModal = document.getElementById("screenshot-modal");
+            const screenshotImage = document.getElementById("screenshot-image");
+            const screenshotMeta = document.getElementById("screenshot-meta");
+            const screenshotLink = document.getElementById("screenshot-link");
+
+            const imageUrl = String(payload.url || "").trim();
+            if (!imageUrl) {
+                return;
+            }
+
+            screenshotImage.src = imageUrl;
+            screenshotLink.href = imageUrl;
+            screenshotLink.textContent = imageUrl;
+
+            const username = String(payload.username || "unknown").trim();
+            const service = String(payload.service || "unknown").trim();
+            const documentName = String(payload.document_name || "n/a").trim();
+            const capturedAt = formatTimestamp(payload.timestamp);
+
+            screenshotMeta.textContent = `User: ${username} | Service: ${service} | Document: ${documentName} | Captured: ${capturedAt}`;
+
+            screenshotModal.classList.remove("hidden");
+            screenshotModal.classList.add("flex");
+        };
+
+        const closeScreenshotModal = () => {
+            const screenshotModal = document.getElementById("screenshot-modal");
+            const screenshotImage = document.getElementById("screenshot-image");
+            const screenshotMeta = document.getElementById("screenshot-meta");
+            const screenshotLink = document.getElementById("screenshot-link");
+
+            screenshotImage.src = "";
+            screenshotMeta.textContent = "No screenshot loaded yet.";
+            screenshotLink.href = "#";
+            screenshotLink.textContent = "";
+
+            screenshotModal.classList.add("hidden");
+            screenshotModal.classList.remove("flex");
+        };
+
+        const handleScreenshotPayload = (payload) => {
+            if (!payload || typeof payload !== "object") {
+                return;
+            }
+
+            if (String(payload.type || "").toLowerCase() !== "screenshot") {
+                return;
+            }
+
+            if (!isSameTeam(payload.team, currentTeamName)) {
+                return;
+            }
+
+            openScreenshotModal(payload);
+        };
+
+        const requestUserScreenshot = (targetUsername) => {
+            const username = String(targetUsername || "").trim();
+            if (!username) {
+                return;
+            }
+
+            if (!currentTeamName) {
+                showDashboardError("Cannot request screenshot because team context is missing.");
+                return;
+            }
+
+            socket.emit("request_screenshot", {
+                leaderUsername: leaderCredentials.username,
+                leaderSecret: leaderCredentials.secret,
+                team: currentTeamName,
+                targetUsername: username,
+            });
+        };
+
+        const initDashboard = (dashboardData) => {
+            const { leader = {}, summary = {}, users = [], daily = [], online_usernames: onlineUsers = [] } = dashboardData || {};
+
+            currentTeamId = Number(leader.team_id || 0);
+            currentTeamName = String(leader.team_name || "").trim();
+            latestUsers = Array.isArray(users) ? users : [];
+            onlineUsernames = new Set((Array.isArray(onlineUsers) ? onlineUsers : []).map((value) => normalizeUsername(value)));
+
+            document.getElementById("leader-name").textContent = leader.username || "...";
+            document.getElementById("team-name").textContent = leader.team_name || "...";
+            document.getElementById("last-sync").textContent = formatDate(summary.last_heartbeat_at);
+
+            document.getElementById("stat-members").textContent = formatNumber(latestUsers.length);
+            document.getElementById("stat-heartbeats").textContent = formatNumber(summary.total_heartbeats);
+            document.getElementById("stat-chars").textContent = formatNumber(summary.total_character_changes);
+            document.getElementById("stat-services").textContent = formatNumber(summary.services_used);
+
+            if (daily.length > 0) {
+                const peakDay = daily.reduce((max, current) => {
+                    return Number(current.total_activity || 0) > Number(max.total_activity || 0) ? current : max;
+                }, daily[0]);
+
+                document.getElementById("stat-peak").textContent = formatNumber(peakDay.total_activity);
+                const peakDateObj = new Date(peakDay.day + "T00:00:00");
+                if (!Number.isNaN(peakDateObj.getTime())) {
+                    document.getElementById("stat-peak-date").textContent = "on " + new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(peakDateObj);
+                }
+            } else {
+                document.getElementById("stat-peak").textContent = "0";
+                document.getElementById("stat-peak-date").textContent = "...";
+            }
+
+            renderUserTable(latestUsers);
+            updateCharts(daily, latestUsers);
+        };
+
+        const loadDashboardData = async (options = {}) => {
+            const suppressErrorBanner = Boolean(options.suppressErrorBanner);
+
+            if (isDashboardLoading) {
+                refreshRequestedDuringLoad = true;
+                return;
+            }
+
+            isDashboardLoading = true;
+
+            try {
+                const response = await fetch("/api/team-info", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(leaderCredentials),
+                });
+
+                if (!response.ok) {
+                    throw new Error("Failed to fetch team information");
+                }
+
+                const data = await response.json();
+                initDashboard(data);
+                clearDashboardError();
+            } catch (error) {
+                console.error("Dashboard fetch failed", error);
+                if (!suppressErrorBanner) {
+                    showDashboardError("Unable to load team information right now. Please refresh and try again.");
+                }
+            } finally {
+                isDashboardLoading = false;
+                if (refreshRequestedDuringLoad) {
+                    refreshRequestedDuringLoad = false;
+                    requestDashboardRefresh({ suppressErrorBanner: true });
+                }
+            }
+        };
+
+        const requestDashboardRefresh = (options = {}) => {
+            if (isDashboardLoading) {
+                refreshRequestedDuringLoad = true;
+                return;
+            }
+
+            const now = Date.now();
+            const waitMs = Math.max(0, nextAllowedRefreshAt - now);
+
+            if (queuedRefreshTimeout !== null) {
+                return;
+            }
+
+            queuedRefreshTimeout = window.setTimeout(() => {
+                queuedRefreshTimeout = null;
+                nextAllowedRefreshAt = Date.now() + SOCKET_MAX_REFRESH_RATE_MS;
+                loadDashboardData(options);
+            }, waitMs);
+        };
+
+        socket.on("heartbeat_saved", (event) => {
+            if (!event || !event.team_id || !currentTeamId) {
+                return;
+            }
+
+            if (Number(event.team_id) !== Number(currentTeamId)) {
+                return;
+            }
+
+            requestDashboardRefresh({ suppressErrorBanner: true });
+        });
+
+        socket.on("presence_updated", (event) => {
+            if (!event || typeof event !== "object") {
+                return;
+            }
+
+            const sameTeamById = event.team_id && currentTeamId && Number(event.team_id) === Number(currentTeamId);
+            const sameTeamByName = isSameTeam(event.team_name, currentTeamName);
+            if (!sameTeamById && !sameTeamByName) {
+                return;
+            }
+
+            const normalizedUsername = normalizeUsername(event.username);
+            if (!normalizedUsername) {
+                return;
+            }
+
+            if (event.online) {
+                onlineUsernames.add(normalizedUsername);
+            } else {
+                onlineUsernames.delete(normalizedUsername);
+            }
+
+            renderUserTable(latestUsers);
+        });
+
+        socket.on("screenshot_response", (payload) => {
+            handleScreenshotPayload(payload);
+        });
+
+        socket.on("message", (payload) => {
+            handleScreenshotPayload(payload);
+        });
+
+        socket.on("screenshot_status", (event) => {
+            if (!event || typeof event !== "object") {
+                return;
+            }
+
+            if (event.status === "offline") {
+                showDashboardError(`${event.targetUsername || "User"} is offline. Screenshot cannot be requested.`);
+                return;
+            }
+
+            if (event.status === "error") {
+                showDashboardError(event.error || "Unable to request screenshot right now.");
+            }
+        });
+
+        document.getElementById("user-table-body").addEventListener("click", (event) => {
+            const button = event.target.closest("button[data-action='see-screen']");
+            if (!button) {
+                return;
+            }
+
+            const targetUsername = button.getAttribute("data-username");
+            requestUserScreenshot(targetUsername);
+        });
+
+        document.getElementById("screenshot-modal-close").addEventListener("click", () => {
+            closeScreenshotModal();
+        });
+
+        document.getElementById("screenshot-modal").addEventListener("click", (event) => {
+            if (event.target.id === "screenshot-modal") {
+                closeScreenshotModal();
+            }
+        });
+
+        document.getElementById("logout-btn").addEventListener("click", () => {
+            window.location.href = "/dashboard/logout";
+        });
+
+        document.addEventListener("DOMContentLoaded", () => {
+            loadDashboardData({ suppressErrorBanner: false });
+
+            window.setInterval(() => {
+                requestDashboardRefresh({ suppressErrorBanner: true });
+            }, FALLBACK_REFRESH_INTERVAL_MS);
+        });
+    </script>
+</body>
+</html>
+
