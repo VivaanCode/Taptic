@@ -1,0 +1,70 @@
+<!-- Simple HTML to generate placeholder icons for development -->
+<!-- Open this file in a browser, right-click each icon, and save as PNG -->
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Seam Icon Generator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 40px;
+      background: #f5f5f5;
+    }
+    .icon-container {
+      display: inline-block;
+      margin: 20px;
+      text-align: center;
+    }
+    canvas {
+      border: 1px solid #ddd;
+      background: white;
+      display: block;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Seam Extension Icons</h1>
+  <p>Right-click each icon and "Save image as..." to save as PNG</p>
+  
+  <div class="icon-container">
+    <canvas id="icon16" width="16" height="16"></canvas>
+    <p>icon16.png</p>
+  </div>
+  
+  <div class="icon-container">
+    <canvas id="icon48" width="48" height="48"></canvas>
+    <p>icon48.png</p>
+  </div>
+  
+  <div class="icon-container">
+    <canvas id="icon128" width="128" height="128"></canvas>
+    <p>icon128.png</p>
+  </div>
+
+  <script>
+    function drawIcon(canvasId, size) {
+      const canvas = document.getElementById(canvasId);
+      const ctx = canvas.getContext('2d');
+      
+      // Background gradient
+      const gradient = ctx.createLinearGradient(0, 0, size, size);
+      gradient.addColorStop(0, '#667eea');
+      gradient.addColorStop(1, '#764ba2');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, size, size);
+      
+      // Draw "S" for Seam
+      ctx.fillStyle = 'white';
+      ctx.font = `bold ${size * 0.6}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('S', size / 2, size / 2);
+    }
+    
+    drawIcon('icon16', 16);
+    drawIcon('icon48', 48);
+    drawIcon('icon128', 128);
+  </script>
+</body>
+</html>
