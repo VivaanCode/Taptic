@@ -1,1 +1,1044 @@
+const crypto = require("crypto");
+const express = require("express");
+const fs = require("fs/promises");
+const http = require("http");
+const path = require("path");
+const { Pool } = require("pg");
+const { Server } = require("socket.io");
+const dotenv = require("dotenv");
+
+dotenv.config({ path: path.join(__dirname, ".env") });
+
+const DASHBOARD_TEMPLATE_PATH = path.join(__dirname, "dashboard.html");
+const LOGIN_TEMPLATE_PATH = path.join(__dirname, "dashboard-login.html");
+const HOME_TEMPLATE_PATH = path.join(__dirname, "home.html");
+const TEAM_NEW_TEMPLATE_PATH = path.join(__dirname, "team-new.html");
+const TEAM_SUCCESS_TEMPLATE_PATH = path.join(__dirname, "team-success.html");
+const ERROR_TEMPLATE_PATH = path.join(__dirname, "error.html");
+
+let dashboardTemplateCache = null;
+let loginTemplateCache = null;
+let homeTemplateCache = null;
+let teamNewTemplateCache = null;
+let teamSuccessTemplateCache = null;
+let errorTemplateCache = null;
+
+const app = express();
+const server = http.createServer(app);
+
+const io = new Server(server, {
+	cors: {
+		origin: "*",
+	},
+});
+
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+app.use("/static", express.static(path.join(__dirname, "public")));
+
+const SESSION_COOKIE_NAME = "seam_dashboard_session";
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+const sessions = new Map();
+const socketPresenceById = new Map();
+const userSocketsByKey = new Map();
+
+function buildUserPresenceKey(teamName, username) {
+	return `${String(teamName || "").trim().toLowerCase()}::${String(username || "").trim().toLowerCase()}`;
+}
+
+function setSocketPresence(socketId, teamName, username, token, teamId = null, lastSeenAt = Date.now()) {
+	const normalizedTeamName = String(teamName || "").trim();
+	const normalizedUsername = String(username || "").trim();
+
+	if (!normalizedTeamName || !normalizedUsername) {
+		return;
+	}
+
+	const key = buildUserPresenceKey(normalizedTeamName, normalizedUsername);
+	const existing = socketPresenceById.get(socketId);
+
+	if (existing && existing.key !== key) {
+		const oldSet = userSocketsByKey.get(existing.key);
+		if (oldSet) {
+			oldSet.delete(socketId);
+			if (oldSet.size === 0) {
+				userSocketsByKey.delete(existing.key);
+			}
+		}
+	}
+
+	let socketIds = userSocketsByKey.get(key);
+	if (!socketIds) {
+		socketIds = new Set();
+		userSocketsByKey.set(key, socketIds);
+	}
+
+	socketIds.add(socketId);
+	socketPresenceById.set(socketId, {
+		key,
+		teamName: normalizedTeamName,
+		teamId: teamId === null ? null : Number(teamId),
+		username: normalizedUsername,
+		token: String(token || "").trim(),
+		lastSeenAt,
+	});
+
+	return socketPresenceById.get(socketId);
+}
+
+function removeSocketPresence(socketId) {
+	const existing = socketPresenceById.get(socketId);
+	if (!existing) {
+		return null;
+	}
+
+	const socketIds = userSocketsByKey.get(existing.key);
+	if (socketIds) {
+		socketIds.delete(socketId);
+		if (socketIds.size === 0) {
+			userSocketsByKey.delete(existing.key);
+		}
+	}
+
+	socketPresenceById.delete(socketId);
+	return existing;
+}
+
+function getOnlineSocketIdsForUser(teamName, username) {
+	const key = buildUserPresenceKey(teamName, username);
+	const socketIds = userSocketsByKey.get(key);
+	if (!socketIds) {
+		return [];
+	}
+
+	const online = [];
+
+	for (const socketId of socketIds) {
+		const metadata = socketPresenceById.get(socketId);
+		if (!metadata) {
+			socketIds.delete(socketId);
+			continue;
+		}
+
+		if (!io.sockets.sockets.has(socketId)) {
+			socketIds.delete(socketId);
+			socketPresenceById.delete(socketId);
+			continue;
+		}
+
+		online.push(socketId);
+	}
+
+	if (socketIds.size === 0) {
+		userSocketsByKey.delete(key);
+	}
+
+	return online;
+}
+
+function getOnlineUsernamesForTeam(teamName) {
+	const normalizedTeamName = String(teamName || "").trim().toLowerCase();
+	if (!normalizedTeamName) {
+		return [];
+	}
+
+	const usernames = new Set();
+
+	for (const [socketId, metadata] of socketPresenceById.entries()) {
+		if (!metadata || metadata.teamName.toLowerCase() !== normalizedTeamName) {
+			continue;
+		}
+
+		if (!io.sockets.sockets.has(socketId)) {
+			removeSocketPresence(socketId);
+			continue;
+		}
+
+		usernames.add(metadata.username);
+	}
+
+	return Array.from(usernames);
+}
+
+function emitPresenceUpdated(metadata, online) {
+	if (!metadata) {
+		return;
+	}
+
+	io.emit("presence_updated", {
+		online: Boolean(online),
+		team_id: metadata.teamId,
+		team_name: metadata.teamName,
+		username: metadata.username,
+		timestamp: Date.now(),
+	});
+}
+
+function extractSocketCredentials(payload = {}) {
+	const username = String(payload.username ?? payload.clientUsername ?? "").trim();
+	const team = String(payload.team ?? payload.clientTeam ?? "").trim();
+	const token = String(payload.token ?? payload.clientToken ?? "").trim();
+
+	if (!username || !team || !token) {
+		return null;
+	}
+
+	return { username, team, token };
+}
+
+async function authenticateSocketIdentity(username, team, token) {
+	const authResult = await pool.query(
+		`SELECT u.id AS user_id, u.username, u.token, u.team_id, t.name AS team_name
+		 FROM users u
+		 JOIN teams t ON t.id = u.team_id
+		 WHERE u.username = $1
+		   AND u.token = $2
+		   AND t.name = $3`,
+		[username, token, team],
+	);
+
+	if (authResult.rowCount === 0) {
+		return null;
+	}
+
+	return authResult.rows[0];
+}
+
+async function registerSocketPresenceFromCredentials(socket, rawCredentials) {
+	const credentials = extractSocketCredentials(rawCredentials || {});
+	if (!credentials) {
+		return null;
+	}
+
+	const existing = socketPresenceById.get(socket.id);
+	const nextKey = buildUserPresenceKey(credentials.team, credentials.username);
+	if (existing && existing.key === nextKey && existing.token === credentials.token) {
+		existing.lastSeenAt = Date.now();
+		return existing;
+	}
+
+	const authRow = await authenticateSocketIdentity(credentials.username, credentials.team, credentials.token);
+	if (!authRow) {
+		return null;
+	}
+
+	const metadata = setSocketPresence(
+		socket.id,
+		authRow.team_name,
+		authRow.username,
+		authRow.token,
+		authRow.team_id,
+		Date.now(),
+	);
+
+	emitPresenceUpdated(metadata, true);
+	return metadata;
+}
+
+function normalizeDatabaseUrl(rawValue) {
+	if (!rawValue) {
+		return null;
+	}
+
+	const match = rawValue.match(/postgres(?:ql)?:\/\/[^\s'\"]+/i);
+	if (match) {
+		return match[0];
+	}
+
+	return rawValue.trim().replace(/^['\"]|['\"]$/g, "");
+}
+
+const databaseUrl = normalizeDatabaseUrl(process.env.DATABASE_URL);
+
+if (!databaseUrl) {
+	throw new Error("DATABASE_URL is missing from backend/.env");
+}
+
+const isLocalDatabase = /(localhost|127\.0\.0\.1)/i.test(databaseUrl);
+const pool = new Pool({
+	connectionString: databaseUrl,
+	ssl: isLocalDatabase ? false : { rejectUnauthorized: false },
+});
+
+function generateToken() {
+	return crypto.randomBytes(18).toString("hex");
+}
+
+function parseCookies(cookieHeader = "") {
+	const cookies = {};
+	for (const part of cookieHeader.split(";")) {
+		const [key, ...valueParts] = part.trim().split("=");
+		if (!key) {
+			continue;
+		}
+
+		cookies[key] = decodeURIComponent(valueParts.join("="));
+	}
+
+	return cookies;
+}
+
+function createSession(userId) {
+	const sessionId = crypto.randomBytes(24).toString("hex");
+	sessions.set(sessionId, {
+		userId,
+		expiresAt: Date.now() + SESSION_TTL_MS,
+	});
+
+	return sessionId;
+}
+
+function escapeHtml(value) {
+	return String(value ?? "")
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/\"/g, "&quot;")
+		.replace(/'/g, "&#39;");
+}
+
+function toInteger(value) {
+	const parsed = Number.parseInt(value, 10);
+	if (Number.isNaN(parsed)) {
+		return 0;
+	}
+
+	return parsed;
+}
+
+function parseMemberUsernames(memberUsernamesText, leaderUsername) {
+	const usernames = memberUsernamesText
+		.split(/[,\n]/)
+		.map((entry) => entry.trim())
+		.filter(Boolean);
+
+	const seen = new Set();
+	const normalized = [];
+
+	for (const username of usernames) {
+		const key = username.toLowerCase();
+		if (key === leaderUsername.toLowerCase()) {
+			continue;
+		}
+
+		if (seen.has(key)) {
+			continue;
+		}
+
+		seen.add(key);
+		normalized.push(username);
+	}
+
+	return normalized;
+}
+
+async function getHomeTemplate() {
+	if (homeTemplateCache === null) {
+		homeTemplateCache = await fs.readFile(HOME_TEMPLATE_PATH, "utf-8");
+	}
+
+	return homeTemplateCache;
+}
+
+async function getTeamNewTemplate() {
+	if (teamNewTemplateCache === null) {
+		teamNewTemplateCache = await fs.readFile(TEAM_NEW_TEMPLATE_PATH, "utf-8");
+	}
+
+	return teamNewTemplateCache;
+}
+
+async function getTeamSuccessTemplate() {
+	if (teamSuccessTemplateCache === null) {
+		teamSuccessTemplateCache = await fs.readFile(TEAM_SUCCESS_TEMPLATE_PATH, "utf-8");
+	}
+
+	return teamSuccessTemplateCache;
+}
+
+async function getErrorTemplate() {
+	if (errorTemplateCache === null) {
+		errorTemplateCache = await fs.readFile(ERROR_TEMPLATE_PATH, "utf-8");
+	}
+
+	return errorTemplateCache;
+}
+
+async function renderErrorPage(title, message) {
+	const template = await getErrorTemplate();
+	return template
+		.replace("__ERROR_TITLE__", escapeHtml(title))
+		.replace("__ERROR_TITLE__", escapeHtml(title))
+		.replace("__ERROR_MESSAGE__", escapeHtml(message));
+}
+
+async function renderTeamSuccessPage(teamName, users) {
+	const template = await getTeamSuccessTemplate();
+
+	const userRows = users
+		.map(
+			(user) => `
+            <tr class="border-b border-white/10 table-row-hover" style="color: var(--color-text-main);">
+              <td class="px-4 py-3">${escapeHtml(user.username)}</td>
+              <td class="px-4 py-3">
+                <span class="role-pill ${
+					user.role === "leader" ? "role-pill-leader" : ""
+				} px-2 py-1 text-xs font-medium">
+                  ${escapeHtml(user.role)}
+                </span>
+              </td>
+              <td class="px-4 py-3">
+                <code class="text-xs" style="color: var(--color-accent);">${escapeHtml(user.token)}</code>
+              </td>
+            </tr>`,
+		)
+		.join("");
+
+	return template.replace("__TEAM_NAME__", escapeHtml(teamName)).replace("__USER_ROWS__", userRows);
+}
+
+async function getAuthenticatedLeader(req) {
+	const cookies = parseCookies(req.headers.cookie);
+	const sessionId = cookies[SESSION_COOKIE_NAME];
+
+	if (!sessionId) {
+		return null;
+	}
+
+	const session = sessions.get(sessionId);
+	if (!session) {
+		return null;
+	}
+
+	if (session.expiresAt < Date.now()) {
+		sessions.delete(sessionId);
+		return null;
+	}
+
+	session.expiresAt = Date.now() + SESSION_TTL_MS;
+
+	const result = await pool.query(
+		`SELECT u.id, u.username, u.token, u.team_id, t.name AS team_name
+		 FROM users u
+		 JOIN teams t ON t.id = u.team_id
+		 WHERE u.id = $1 AND u.role = 'leader'`,
+		[session.userId],
+	);
+
+	if (result.rowCount === 0) {
+		sessions.delete(sessionId);
+		return null;
+	}
+
+	return result.rows[0];
+}
+
+function serializeForInlineScript(value) {
+	return JSON.stringify(value).replace(/</g, "\\u003c");
+}
+
+async function getTeamDashboardData(teamId) {
+	const summaryResult = await pool.query(
+		`SELECT
+			COUNT(*)::INT AS total_heartbeats,
+			COALESCE(SUM(characters_added + characters_removed + characters_modified), 0)::INT AS total_character_changes,
+			COUNT(DISTINCT service)::INT AS services_used,
+			MAX(received_at) AS last_heartbeat_at
+		 FROM heartbeats
+		 WHERE team_id = $1`,
+		[teamId],
+	);
+
+	const usersResult = await pool.query(
+		`SELECT
+			u.username,
+			u.role,
+			COUNT(h.id)::INT AS heartbeat_count,
+			MAX(h.received_at) AS last_heartbeat_at,
+			COALESCE(SUM(h.characters_added), 0)::INT AS characters_added,
+			COALESCE(SUM(h.characters_removed), 0)::INT AS characters_removed,
+			COALESCE(SUM(h.characters_modified), 0)::INT AS characters_modified,
+			COALESCE(SUM(h.characters_added + h.characters_removed + h.characters_modified), 0)::INT AS total_activity
+		 FROM users u
+		 LEFT JOIN heartbeats h ON h.user_id = u.id
+		 WHERE u.team_id = $1
+		 GROUP BY u.id
+		 ORDER BY total_activity DESC, u.username ASC`,
+		[teamId],
+	);
+
+	const dailyResult = await pool.query(
+		`SELECT
+			TO_CHAR(day::date, 'YYYY-MM-DD') AS day,
+			COALESCE(SUM(h.characters_added + h.characters_removed + h.characters_modified), 0)::INT AS total_activity,
+			COALESCE(COUNT(h.id), 0)::INT AS heartbeat_count
+		 FROM generate_series(CURRENT_DATE - INTERVAL '13 days', CURRENT_DATE, INTERVAL '1 day') AS day
+		 LEFT JOIN heartbeats h
+			ON DATE(h.received_at) = DATE(day)
+			AND h.team_id = $1
+		 GROUP BY day
+		 ORDER BY day ASC`,
+		[teamId],
+	);
+
+	return {
+		summary: summaryResult.rows[0],
+		users: usersResult.rows,
+		daily: dailyResult.rows,
+	};
+}
+
+async function getDashboardTemplate() {
+	if (dashboardTemplateCache === null) {
+		dashboardTemplateCache = await fs.readFile(DASHBOARD_TEMPLATE_PATH, "utf8");
+	}
+
+	return dashboardTemplateCache;
+}
+
+async function getLoginTemplate() {
+	if (loginTemplateCache === null) {
+		loginTemplateCache = await fs.readFile(LOGIN_TEMPLATE_PATH, "utf8");
+	}
+
+	return loginTemplateCache;
+}
+
+async function renderLoginPage(errorMessage = "") {
+	const template = await getLoginTemplate();
+	const errorBlock = errorMessage
+		? `<div class="alert-danger rounded-lg px-4 py-3 text-sm mb-4">${escapeHtml(errorMessage)}</div>`
+		: "";
+
+	return template.replace("__LOGIN_ERROR_BLOCK__", errorBlock);
+}
+
+async function renderDashboardPage(leaderUsername, leaderSecret) {
+	const leaderCredentials = serializeForInlineScript({
+		username: leaderUsername,
+		secret: leaderSecret,
+	});
+
+	const template = await getDashboardTemplate();
+	return template.replace("__LEADER_CREDENTIALS__", leaderCredentials);
+}
+
+async function initializeDatabase() {
+	await pool.query(`
+		CREATE TABLE IF NOT EXISTS teams (
+			id SERIAL PRIMARY KEY,
+			name TEXT UNIQUE NOT NULL,
+			leader_user_id INTEGER,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		);
+
+		CREATE TABLE IF NOT EXISTS users (
+			id SERIAL PRIMARY KEY,
+			team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+			username TEXT NOT NULL,
+			token TEXT UNIQUE NOT NULL,
+			role TEXT NOT NULL CHECK (role IN ('leader', 'member')),
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			UNIQUE (team_id, username)
+		);
+
+		CREATE TABLE IF NOT EXISTS heartbeats (
+			id BIGSERIAL PRIMARY KEY,
+			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+			service TEXT NOT NULL,
+			document_name TEXT,
+			characters_added INTEGER NOT NULL DEFAULT 0,
+			characters_removed INTEGER NOT NULL DEFAULT 0,
+			characters_modified INTEGER NOT NULL DEFAULT 0,
+			received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_users_team_id ON users(team_id);
+		CREATE INDEX IF NOT EXISTS idx_heartbeats_team_id ON heartbeats(team_id);
+		CREATE INDEX IF NOT EXISTS idx_heartbeats_user_id ON heartbeats(user_id);
+		CREATE INDEX IF NOT EXISTS idx_heartbeats_received_at ON heartbeats(received_at);
+	`);
+
+	await pool.query(`
+		ALTER TABLE teams ADD COLUMN IF NOT EXISTS leader_user_id INTEGER;
+		ALTER TABLE teams ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+		ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+		ALTER TABLE heartbeats ADD COLUMN IF NOT EXISTS received_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+	`);
+
+	await pool.query(`
+		DO $$
+		BEGIN
+			IF NOT EXISTS (
+				SELECT 1
+				FROM information_schema.table_constraints
+				WHERE table_name = 'teams'
+				AND constraint_name = 'teams_leader_user_fkey'
+			) THEN
+				ALTER TABLE teams
+				ADD CONSTRAINT teams_leader_user_fkey
+				FOREIGN KEY (leader_user_id) REFERENCES users(id) ON DELETE SET NULL;
+			END IF;
+		END $$;
+	`);
+}
+
+app.get("/", async (req, res) => {
+	try {
+		const html = await getHomeTemplate();
+		res.send(html);
+	} catch (error) {
+		console.error("Failed to load home page", error);
+		res.status(500).send(await renderErrorPage("Server Error", "Unable to load the home page right now."));
+	}
+});
+
+app.get("/teams/new", async (req, res) => {
+	try {
+		const html = await getTeamNewTemplate();
+		res.send(html);
+	} catch (error) {
+		console.error("Failed to load team creation page", error);
+		res.status(500).send(
+			await renderErrorPage("Server Error", "Unable to load the team creation page right now."),
+		);
+	}
+});
+
+app.post("/teams/new", async (req, res) => {
+	const teamName = String(req.body.team_name || "").trim();
+	const leaderUsername = String(req.body.leader_username || "").trim();
+	const memberUsernamesText = String(req.body.member_usernames || "");
+
+	if (!teamName || !leaderUsername) {
+		res
+			.status(400)
+			.send(
+				await renderErrorPage("Create Team Failed", "Team name and leader username are required."),
+			);
+		return;
+	}
+
+	const memberUsernames = parseMemberUsernames(memberUsernamesText, leaderUsername);
+	const client = await pool.connect();
+
+	try {
+		await client.query("BEGIN");
+
+		const teamResult = await client.query(
+			"INSERT INTO teams(name) VALUES($1) RETURNING id, name",
+			[teamName],
+		);
+		const team = teamResult.rows[0];
+
+		const leaderToken = generateToken();
+		const leaderResult = await client.query(
+			"INSERT INTO users(team_id, username, token, role) VALUES($1, $2, $3, 'leader') RETURNING id, username, token, role",
+			[team.id, leaderUsername, leaderToken],
+		);
+
+		await client.query("UPDATE teams SET leader_user_id = $1 WHERE id = $2", [
+			leaderResult.rows[0].id,
+			team.id,
+		]);
+
+		const createdMembers = [];
+		for (const memberUsername of memberUsernames) {
+			const memberToken = generateToken();
+			const memberResult = await client.query(
+				"INSERT INTO users(team_id, username, token, role) VALUES($1, $2, $3, 'member') RETURNING username, token, role",
+				[team.id, memberUsername, memberToken],
+			);
+			createdMembers.push(memberResult.rows[0]);
+		}
+
+		await client.query("COMMIT");
+
+		const allUsers = [leaderResult.rows[0], ...createdMembers];
+
+		res.send(await renderTeamSuccessPage(team.name, allUsers));
+	} catch (error) {
+		await client.query("ROLLBACK");
+
+		if (error.code === "23505") {
+			res
+				.status(409)
+				.send(
+					await renderErrorPage(
+						"Create Team Failed",
+						"That team name or username already exists. Please choose unique names.",
+					),
+				);
+			return;
+		}
+
+		console.error("Failed to create team and users", error);
+		res.status(500).send(
+			await renderErrorPage("Create Team Failed", "Unexpected error while creating the team."),
+		);
+	} finally {
+		client.release();
+	}
+});
+
+app.get("/dashboard/login", async (req, res) => {
+	try {
+		res.send(await renderLoginPage());
+	} catch (error) {
+		console.error("Failed to render login page", error);
+		res.status(500).send(
+			await renderErrorPage("Login Page Error", "Unable to load the login page right now."),
+		);
+	}
+});
+
+app.post("/dashboard/login", async (req, res) => {
+	try {
+		const username = String(req.body.username || "").trim();
+		const token = String(req.body.token || "").trim();
+
+		if (!username || !token) {
+			res.status(400).send(await renderLoginPage("Username and token are required."));
+			return;
+		}
+
+		const result = await pool.query(
+			`SELECT id
+			 FROM users
+			 WHERE username = $1 AND token = $2 AND role = 'leader'`,
+			[username, token],
+		);
+
+		if (result.rowCount === 0) {
+			res.status(401).send(await renderLoginPage("Invalid leader credentials."));
+			return;
+		}
+
+		const sessionId = createSession(result.rows[0].id);
+		res.setHeader(
+			"Set-Cookie",
+			`${SESSION_COOKIE_NAME}=${sessionId}; HttpOnly; Path=/; Max-Age=${Math.floor(
+				SESSION_TTL_MS / 1000,
+			)}; SameSite=Lax`,
+		);
+		res.redirect("/dashboard");
+	} catch (error) {
+		console.error("Dashboard login failed", error);
+		res.status(500).send(await renderLoginPage("Unexpected error during login."));
+	}
+});
+
+app.get("/dashboard/logout", (req, res) => {
+	const cookies = parseCookies(req.headers.cookie);
+	const sessionId = cookies[SESSION_COOKIE_NAME];
+	if (sessionId) {
+		sessions.delete(sessionId);
+	}
+
+	res.setHeader("Set-Cookie", `${SESSION_COOKIE_NAME}=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax`);
+	res.redirect("/dashboard/login");
+});
+
+app.post("/api/team-info", async (req, res) => {
+	try {
+		const username = String(req.body.username || "").trim();
+		const secret = String(req.body.secret || "").trim();
+
+		if (!username || !secret) {
+			res.status(400).json({ error: "username and secret are required" });
+			return;
+		}
+
+		const leaderResult = await pool.query(
+			`SELECT u.id, u.username, u.team_id, t.name AS team_name
+			 FROM users u
+			 JOIN teams t ON t.id = u.team_id
+			 WHERE u.username = $1 AND u.token = $2 AND u.role = 'leader'`,
+			[username, secret],
+		);
+
+		if (leaderResult.rowCount === 0) {
+			res.status(401).json({ error: "Invalid leader credentials" });
+			return;
+		}
+
+		const leader = leaderResult.rows[0];
+		const dashboardData = await getTeamDashboardData(leader.team_id);
+		const onlineUsernames = getOnlineUsernamesForTeam(leader.team_name);
+
+		res.json({
+			leader: {
+				username: leader.username,
+				team_id: leader.team_id,
+				team_name: leader.team_name,
+			},
+			summary: dashboardData.summary,
+			users: dashboardData.users,
+			daily: dashboardData.daily,
+			online_usernames: onlineUsernames,
+		});
+	} catch (error) {
+		console.error("Failed to fetch team information", error);
+		res.status(500).json({ error: "Unable to fetch team information" });
+	}
+});
+
+app.get("/dashboard", async (req, res) => {
+	try {
+		const leader = await getAuthenticatedLeader(req);
+		if (!leader) {
+			res.redirect("/dashboard/login");
+			return;
+		}
+
+		res.send(await renderDashboardPage(leader.username, leader.token));
+	} catch (error) {
+		console.error("Failed to render dashboard", error);
+		res.status(500).send(
+			await renderErrorPage("Dashboard Error", "Unable to load team dashboard right now."),
+		);
+	}
+});
+
+io.on("connection", (socket) => {
+	console.log(`Client connected: ${socket.id}`);
+
+	socket.emit("message", "Connected to server");
+
+	registerSocketPresenceFromCredentials(socket, socket.handshake.auth).catch((error) => {
+		console.error(`Failed handshake auth registration for ${socket.id}`, error);
+	});
+
+	registerSocketPresenceFromCredentials(socket, socket.handshake.query).catch((error) => {
+		console.error(`Failed handshake query registration for ${socket.id}`, error);
+	});
+
+	socket.on("register_presence", async (payload = {}) => {
+		try {
+			const metadata = await registerSocketPresenceFromCredentials(socket, payload);
+			if (!metadata) {
+				socket.emit("presence_status", {
+					status: "error",
+					error: "Unable to register presence with provided credentials",
+				});
+				return;
+			}
+
+			socket.emit("presence_status", {
+				status: "ok",
+				username: metadata.username,
+				team_name: metadata.teamName,
+			});
+		} catch (error) {
+			console.error(`Failed register_presence for ${socket.id}`, error);
+			socket.emit("presence_status", {
+				status: "error",
+				error: "Unexpected error while registering presence",
+			});
+		}
+	});
+
+	socket.on("request_screenshot", async (payload = {}) => {
+		const leaderUsername = String(payload.leaderUsername || "").trim();
+		const leaderSecret = String(payload.leaderSecret || "").trim();
+		const team = String(payload.team || "").trim();
+		const targetUsername = String(payload.targetUsername || "").trim();
+
+		if (!leaderUsername || !leaderSecret || !team || !targetUsername) {
+			socket.emit("screenshot_status", {
+				status: "error",
+				error: "Missing leader credentials, team, or target username",
+				targetUsername,
+			});
+			return;
+		}
+
+		try {
+			const leaderCheck = await pool.query(
+				`SELECT u.id
+				 FROM users u
+				 JOIN teams t ON t.id = u.team_id
+				 WHERE u.username = $1
+				   AND u.token = $2
+				   AND u.role = 'leader'
+				   AND t.name = $3`,
+				[leaderUsername, leaderSecret, team],
+			);
+
+			if (leaderCheck.rowCount === 0) {
+				socket.emit("screenshot_status", {
+					status: "error",
+					error: "Invalid leader credentials for screenshot request",
+					targetUsername,
+				});
+				return;
+			}
+
+			const onlineSocketIds = getOnlineSocketIdsForUser(team, targetUsername);
+			if (onlineSocketIds.length === 0) {
+				socket.emit("screenshot_status", {
+					status: "offline",
+					targetUsername,
+					error: "Target user is offline",
+				});
+				return;
+			}
+
+			for (const targetSocketId of onlineSocketIds) {
+				io.to(targetSocketId).emit("getScreenshot", {
+					type: "getScreenshot",
+					team,
+					targetUsername,
+					requestedBy: leaderUsername,
+					timestamp: Date.now(),
+				});
+			}
+
+			socket.emit("screenshot_status", {
+				status: "requested",
+				targetUsername,
+			});
+		} catch (error) {
+			console.error(`Failed screenshot request from ${socket.id}`, error);
+			socket.emit("screenshot_status", {
+				status: "error",
+				targetUsername,
+				error: "Unable to request screenshot right now",
+			});
+		}
+	});
+
+	socket.on("message", (payload) => {
+		if (payload && typeof payload === "object") {
+			registerSocketPresenceFromCredentials(socket, payload).catch((error) => {
+				console.error(`Failed message-based presence registration for ${socket.id}`, error);
+			});
+		}
+
+		console.log(`Message from ${socket.id}:`, payload);
+
+		if (payload && typeof payload === "object" && payload.type === "screenshot" && payload.url) {
+			io.emit("screenshot_response", payload);
+		}
+
+		io.emit("message", payload);
+	});
+
+	socket.on("heartbeat", async (payload = {}) => {
+		const username = String(payload.username ?? payload.clientUsername ?? "").trim();
+		const team = String(payload.team ?? payload.clientTeam ?? "").trim();
+		const token = String(payload.token ?? payload.clientToken ?? "").trim();
+		const charactersAdded = toInteger(payload.charactersAdded ?? payload.clientCharactersAdded);
+		const charactersRemoved = toInteger(payload.charactersRemoved ?? payload.clientCharactersRemoved);
+		const charactersModified = toInteger(payload.charactersModified ?? payload.clientCharactersModified);
+		const service = String(payload.service ?? "").trim();
+		const documentName = String(payload.document_name ?? payload.documentName ?? "").trim();
+
+		if (!username || !team || !token || !service) {
+			console.warn(`Invalid heartbeat from ${socket.id}: missing username, team, token, or service`);
+			return;
+		}
+
+		if (service === "google_docs" && !documentName) {
+			console.warn(
+				`Invalid heartbeat from ${socket.id}: service is google_docs but document_name is missing`,
+			);
+			return;
+		}
+
+		try {
+			const authRow = await authenticateSocketIdentity(username, team, token);
+
+			if (!authRow) {
+				console.warn(`Rejected heartbeat from ${socket.id}: invalid username/token/team combination`);
+				return;
+			}
+
+			const previous = socketPresenceById.get(socket.id);
+			const nextKey = buildUserPresenceKey(authRow.team_name, authRow.username);
+			const metadata = setSocketPresence(
+				socket.id,
+				authRow.team_name,
+				authRow.username,
+				authRow.token,
+				authRow.team_id,
+				Date.now(),
+			);
+
+			if (!previous || previous.key !== nextKey) {
+				emitPresenceUpdated(metadata, true);
+			}
+
+			await pool.query(
+				`INSERT INTO heartbeats(
+					user_id,
+					team_id,
+					service,
+					document_name,
+					characters_added,
+					characters_removed,
+					characters_modified
+				 ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+				[
+					authRow.user_id,
+					authRow.team_id,
+					service,
+					documentName || null,
+					charactersAdded,
+					charactersRemoved,
+					charactersModified,
+				],
+			);
+
+			io.emit("heartbeat_saved", {
+				team_id: authRow.team_id,
+				received_at: new Date().toISOString(),
+			});
+
+			const noCharacterChanges =
+				charactersAdded === 0 &&
+				charactersRemoved === 0 &&
+				charactersModified === 0;
+
+			if (noCharacterChanges) {
+				console.log(`heartbeat recieved from ${username}`);
+				return;
+			}
+
+			console.log("Heartbeat received:", {
+				socketId: socket.id,
+				username,
+				team,
+				charactersAdded,
+				charactersRemoved,
+				charactersModified,
+				service,
+				document_name: documentName || null,
+			});
+		} catch (error) {
+			console.error(`Failed to process heartbeat from ${socket.id}`, error);
+		}
+	});
+
+	socket.on("disconnect", () => {
+		const removed = removeSocketPresence(socket.id);
+		emitPresenceUpdated(removed, false);
+		console.log(`Client disconnected: ${socket.id}`);
+	});
+});
+
+const PORT = process.env.PORT || 5173;
+
+async function startServer() {
+	await initializeDatabase();
+	server.listen(PORT, () => {
+		console.log(`Server listening on http://localhost:${PORT}`);
+	});
+}
+
+startServer().catch((error) => {
+	console.error("Server startup failed", error);
+	process.exit(1);
+});
 

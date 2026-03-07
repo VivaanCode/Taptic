@@ -1,0 +1,200 @@
+:root {
+  /* --- Foundation: Deep Charcoal (Less generic blue-black) --- */
+  --color-page-bg: #050505; 
+  --color-surface-1: #0d0d0d; 
+  --color-surface-2: #171717; 
+  
+  /* --- Typography: Sophisticated Contrast --- */
+  --color-text-main: #e5e5e5;
+  --color-text-soft: #b3b3b3;
+  --color-text-muted: #737373;
+  --color-text-strong: #ffffff;
+  
+  /* --- Branding: Muted, Sophisticated Earth/Mineral Tones --- */
+  /* Replaced generic Indigo with a "Smoked Teal" */
+  --color-accent: #2dd4bf; 
+  --color-accent-glow: rgba(45, 212, 191, 0.1);
+
+  /* --- Glass: Lower Blur, Higher Clarity --- */
+  --color-glass-bg: rgba(255, 255, 255, 0.03);
+  --color-glass-border: rgba(255, 255, 255, 0.06);
+  --color-glass-shadow: rgba(0, 0, 0, 0.4);
+
+  /* --- KPI: Intentional Color Palette (Not Neons) --- */
+  /* Use muted variants for data, punchy variants only for alerts */
+  --color-kpi-members: #a3a3a3;
+  --color-kpi-heartbeats: #fb7185;
+  --color-kpi-chars: #34d399;
+  --color-kpi-services: #fbbf24;
+  
+  /* --- Charting: Professional, Monochromatic/Analogous --- */
+  /* Use shades of a single cool grey-teal for cohesion */
+  --color-chart-line: #2dd4bf;
+  --color-chart-bar-1: #0f766e;
+  --color-chart-bar-2: #115e59;
+  --color-chart-bar-3: #134e4a;
+  
+  /* --- Interaction --- */
+  --color-input-bg: #0a0a0a;
+  --color-input-border: #262626;
+  --color-input-focus: #2dd4bf;
+  --color-input-border-focus: #2dd4bf;
+  
+  /* --- Blob Backgrounds (Change these for different colored blur effects) --- */
+  --color-blob-indigo: #4f46e5;
+  --color-blob-teal: #14b8a6;
+  --color-blob-purple: #9333ea;
+  
+  /* --- Presence Indicators --- */
+  --color-presence-online: #10b981;
+  --color-presence-offline: #ef4444;
+  
+  /* --- Screen Button --- */
+  --color-screen-btn-bg: rgba(45, 212, 191, 0.1);
+  --color-screen-btn-bg-hover: rgba(45, 212, 191, 0.2);
+  --color-screen-btn-border: rgba(45, 212, 191, 0.3);
+  --color-screen-btn-text: #2dd4bf;
+  
+  /* --- Modal --- */
+  --color-modal-overlay: rgba(0, 0, 0, 0.75);
+  
+  /* --- Tags/Pills --- */
+  --color-tag-default-bg: rgba(163, 163, 163, 0.1);
+  --color-tag-default-border: rgba(163, 163, 163, 0.3);
+  --color-tag-leader-bg: rgba(251, 113, 133, 0.15);
+  --color-tag-leader-border: rgba(251, 113, 133, 0.4);
+  --color-kpi-peak: #fb7185;
+  
+  /* --- Alerts --- */
+  --color-danger-bg: rgba(239, 68, 68, 0.1);
+  --color-danger-border: rgba(239, 68, 68, 0.3);
+  --color-danger-text: #fca5a5;
+  
+  --color-success-bg: rgba(16, 185, 129, 0.1);
+  --color-success-border: rgba(16, 185, 129, 0.3);
+  --color-success-text: #6ee7b7;
+  
+  /* --- Table --- */
+  --color-table-row-hover: rgba(255, 255, 255, 0.03);
+  
+  /* --- Scrollbar --- */
+  --color-scroll-track: transparent;
+  --color-scroll-thumb: rgba(255, 255, 255, 0.1);
+  --color-scroll-thumb-hover: rgba(255, 255, 255, 0.2);
+  
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+}
+
+.theme-page {
+  background: var(--color-page-bg);
+  color: var(--color-text-main);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-scroll-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-scroll-thumb);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-scroll-thumb-hover);
+}
+
+.glass-panel {
+  background: var(--color-glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--color-glass-border);
+  box-shadow: 0 8px 32px 0 var(--color-glass-shadow);
+}
+
+.blob {
+  border-radius: 9999px;
+  mix-blend-mode: screen;
+  filter: blur(150px);
+  pointer-events: none;
+}
+
+.kpi-icon {
+  font-size: 3rem;
+  line-height: 1;
+}
+
+.table-row-hover:hover {
+  background: var(--color-table-row-hover);
+}
+
+.role-pill {
+  border-radius: 0.375rem;
+  border: 1px solid var(--color-tag-default-border);
+  background: var(--color-tag-default-bg);
+}
+
+.role-pill-leader {
+  border-color: var(--color-tag-leader-border);
+  background: var(--color-tag-leader-bg);
+  color: var(--color-kpi-peak);
+}
+
+.alert-danger {
+  border: 1px solid var(--color-danger-border);
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+}
+
+.auth-input {
+  background: var(--color-input-bg);
+  border: 1px solid var(--color-input-border);
+  color: var(--color-text-strong);
+}
+
+.auth-input:focus {
+  outline: none;
+  border-color: var(--color-input-border-focus);
+  box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.2);
+}
+
+.presence-icon {
+  font-size: 0.65rem;
+  line-height: 1;
+}
+
+.presence-online {
+  color: var(--color-presence-online);
+}
+
+.presence-offline {
+  color: var(--color-presence-offline);
+}
+
+.screen-btn {
+  border: 1px solid var(--color-screen-btn-border);
+  border-radius: 0.5rem;
+  padding: 0.35rem 0.65rem;
+  background: var(--color-screen-btn-bg);
+  color: var(--color-screen-btn-text);
+  font-size: 0.75rem;
+  font-weight: 600;
+  transition: background 120ms ease;
+}
+
+.screen-btn:hover {
+  background: var(--color-screen-btn-bg-hover);
+}
+
+.screenshot-modal-overlay {
+  background: var(--color-modal-overlay);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+

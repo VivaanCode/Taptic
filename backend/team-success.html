@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Team Created</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link
+    rel="stylesheet"
+    type="text/css"
+    href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css"
+  />
+  <link
+    rel="stylesheet"
+    type="text/css"
+    href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/fill/style.css"
+  />
+  <link rel="stylesheet" href="/static/dashboard-theme.css" />
+</head>
+<body class="theme-page antialiased relative min-h-screen overflow-x-hidden">
+  <div class="fixed top-[-10%] left-[-10%] w-[500px] h-[500px] blob opacity-40 z-0" style="background: var(--color-blob-indigo);"></div>
+  <div class="fixed bottom-[-10%] right-[-10%] w-[600px] h-[600px] blob opacity-30 z-0" style="background: var(--color-blob-teal);"></div>
+  <div class="fixed top-[40%] left-[60%] w-[400px] h-[400px] blob opacity-30 z-0" style="background: var(--color-blob-purple);"></div>
+
+  <main class="relative z-10 min-h-screen flex items-center justify-center px-4 py-10">
+    <section class="glass-panel w-full max-w-4xl rounded-2xl p-6 sm:p-8">
+      <div class="mb-6">
+        <h1 class="text-3xl font-bold flex items-center gap-2 mb-2" style="color: var(--color-success-text);">
+          <i class="ph-fill ph-check-circle"></i>
+          Team Created Successfully
+        </h1>
+        <p class="text-lg" style="color: var(--color-text-strong);">
+          Team: <strong>__TEAM_NAME__</strong>
+        </p>
+        <p class="mt-2 text-sm" style="color: var(--color-text-muted);">
+          Share each member's token with that user. The leader token is used to log into the dashboard.
+        </p>
+      </div>
+
+      <div class="overflow-x-auto rounded-lg border border-white/10">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-white/10" style="background: rgba(255, 255, 255, 0.02);">
+              <th class="px-4 py-3 text-left font-semibold" style="color: var(--color-text-strong);">
+                <i class="ph ph-user mr-1"></i>Username
+              </th>
+              <th class="px-4 py-3 text-left font-semibold" style="color: var(--color-text-strong);">
+                <i class="ph ph-shield mr-1"></i>Role
+              </th>
+              <th class="px-4 py-3 text-left font-semibold" style="color: var(--color-text-strong);">
+                <i class="ph ph-key mr-1"></i>Assigned Token
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            __USER_ROWS__
+          </tbody>
+        </table>
+      </div>
+
+      <div class="mt-6 grid gap-3 sm:grid-cols-2">
+        <a 
+          href="/dashboard/login" 
+          class="flex items-center justify-center gap-2 p-3 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors font-medium"
+          style="color: var(--color-accent);"
+        >
+          <i class="ph-fill ph-shield-check"></i>
+          Go to leader login
+        </a>
+
+        <a 
+          href="/teams/new" 
+          class="flex items-center justify-center gap-2 p-3 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors font-medium"
+          style="color: var(--color-text-strong);"
+        >
+          <i class="ph-fill ph-plus-circle"></i>
+          Create another team
+        </a>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

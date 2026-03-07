@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Leader Login</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link
+    rel="stylesheet"
+    type="text/css"
+    href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css"
+  />
+  <link
+    rel="stylesheet"
+    type="text/css"
+    href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/fill/style.css"
+  />
+  <link rel="stylesheet" href="/static/dashboard-theme.css" />
+</head>
+<body class="theme-page antialiased relative min-h-screen overflow-x-hidden">
+  <div class="fixed top-[-10%] left-[-10%] w-[500px] h-[500px] blob opacity-40 z-0" style="background: var(--color-blob-indigo);"></div>
+  <div class="fixed bottom-[-10%] right-[-10%] w-[600px] h-[600px] blob opacity-30 z-0" style="background: var(--color-blob-teal);"></div>
+  <div class="fixed top-[40%] left-[60%] w-[400px] h-[400px] blob opacity-30 z-0" style="background: var(--color-blob-purple);"></div>
+
+  <main class="relative z-10 min-h-screen flex items-center justify-center px-4 py-10">
+    <section class="glass-panel w-full max-w-md rounded-2xl p-6 sm:p-8">
+      <div class="mb-6">
+        <p class="text-sm" style="color: var(--color-text-muted);">Seam Dashboard</p>
+        <h1 class="text-3xl font-bold flex items-center gap-2" style="color: var(--color-text-strong);">
+          <i class="ph-fill ph-shield-check"></i>
+          Leader Login
+        </h1>
+        <p class="mt-2 text-sm" style="color: var(--color-text-muted);">
+          Use your leader username and secret token generated during team setup.
+        </p>
+      </div>
+
+      __LOGIN_ERROR_BLOCK__
+
+      <form method="post" action="/dashboard/login" class="grid gap-4 mt-4">
+        <label class="text-sm" style="color: var(--color-text-soft);">
+          Username
+          <input
+            name="username"
+            required
+            maxlength="120"
+            class="auth-input mt-2 w-full rounded-lg px-3 py-2"
+            placeholder="team_leader"
+            autocomplete="username"
+          />
+        </label>
+
+        <label class="text-sm" style="color: var(--color-text-soft);">
+          Secret Token
+          <input
+            name="token"
+            required
+            maxlength="256"
+            class="auth-input mt-2 w-full rounded-lg px-3 py-2"
+            placeholder="paste leader token"
+            autocomplete="current-password"
+          />
+        </label>
+
+        <button
+          type="submit"
+          class="mt-2 bg-white/10 hover:bg-white/20 transition-colors border border-white/10 rounded-lg px-4 py-2 font-medium"
+          style="color: var(--color-text-strong);"
+        >
+          Sign In
+        </button>
+      </form>
+
+      <p class="mt-6 text-sm">
+        <a href="/" class="hover:underline" style="color: var(--color-accent);">Back home</a>
+      </p>
+    </section>
+  </main>
+</body>
+</html>
+
