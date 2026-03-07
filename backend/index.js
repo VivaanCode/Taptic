@@ -255,7 +255,7 @@ async function getAuthenticatedLeader(req) {
 	session.expiresAt = Date.now() + SESSION_TTL_MS;
 
 	const result = await pool.query(
-		`SELECT u.id, u.username, u.team_id, t.name AS team_name
+		`SELECT u.id, u.username, u.token, u.team_id, t.name AS team_name
 		 FROM users u
 		 JOIN teams t ON t.id = u.team_id
 		 WHERE u.id = $1 AND u.role = 'leader'`,
@@ -268,6 +268,537 @@ async function getAuthenticatedLeader(req) {
 	}
 
 	return result.rows[0];
+}
+
+function serializeForInlineScript(value) {
+	return JSON.stringify(value).replace(/</g, "\\u003c");
+}
+
+async function getTeamDashboardData(teamId) {
+	const summaryResult = await pool.query(
+		`SELECT
+			COUNT(*)::INT AS total_heartbeats,
+			COALESCE(SUM(characters_added + characters_removed + characters_modified), 0)::INT AS total_character_changes,
+			COUNT(DISTINCT service)::INT AS services_used,
+			MAX(received_at) AS last_heartbeat_at
+		 FROM heartbeats
+		 WHERE team_id = $1`,
+		[teamId],
+	);
+
+	const usersResult = await pool.query(
+		`SELECT
+			u.username,
+			u.role,
+			COUNT(h.id)::INT AS heartbeat_count,
+			COALESCE(SUM(h.characters_added), 0)::INT AS characters_added,
+			COALESCE(SUM(h.characters_removed), 0)::INT AS characters_removed,
+			COALESCE(SUM(h.characters_modified), 0)::INT AS characters_modified,
+			COALESCE(SUM(h.characters_added + h.characters_removed + h.characters_modified), 0)::INT AS total_activity
+		 FROM users u
+		 LEFT JOIN heartbeats h ON h.user_id = u.id
+		 WHERE u.team_id = $1
+		 GROUP BY u.id
+		 ORDER BY total_activity DESC, u.username ASC`,
+		[teamId],
+	);
+
+	const dailyResult = await pool.query(
+		`SELECT
+			TO_CHAR(day::date, 'YYYY-MM-DD') AS day,
+			COALESCE(SUM(h.characters_added + h.characters_removed + h.characters_modified), 0)::INT AS total_activity,
+			COALESCE(COUNT(h.id), 0)::INT AS heartbeat_count
+		 FROM generate_series(CURRENT_DATE - INTERVAL '13 days', CURRENT_DATE, INTERVAL '1 day') AS day
+		 LEFT JOIN heartbeats h
+			ON DATE(h.received_at) = DATE(day)
+			AND h.team_id = $1
+		 GROUP BY day
+		 ORDER BY day ASC`,
+		[teamId],
+	);
+
+	return {
+		summary: summaryResult.rows[0],
+		users: usersResult.rows,
+		daily: dailyResult.rows,
+	};
+}
+
+function renderDashboardPage(leaderUsername, leaderSecret) {
+	const leaderCredentials = serializeForInlineScript({
+		username: leaderUsername,
+		secret: leaderSecret,
+	});
+
+	return `<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Team Activity Dashboard</title>
+	<script src="https://cdn.tailwindcss.com"></script>
+	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+	<script>
+		tailwind.config = {
+			theme: {
+				extend: {
+					colors: {
+						glass: {
+							100: "rgba(255, 255, 255, 0.1)",
+							200: "rgba(255, 255, 255, 0.05)",
+						},
+					},
+				},
+			},
+		};
+	</script>
+	<style>
+		::-webkit-scrollbar {
+			width: 8px;
+			height: 8px;
+		}
+		::-webkit-scrollbar-track {
+			background: rgba(255, 255, 255, 0.02);
+		}
+		::-webkit-scrollbar-thumb {
+			background: rgba(255, 255, 255, 0.15);
+			border-radius: 10px;
+		}
+		::-webkit-scrollbar-thumb:hover {
+			background: rgba(255, 255, 255, 0.25);
+		}
+		.glass-panel {
+			background: rgba(255, 255, 255, 0.07);
+			backdrop-filter: blur(16px);
+			-webkit-backdrop-filter: blur(16px);
+			border: 1px solid rgba(255, 255, 255, 0.15);
+			box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+		}
+	</style>
+</head>
+<body class="bg-slate-950 text-slate-200 font-sans antialiased relative min-h-screen overflow-x-hidden">
+	<div class="fixed top-[-10%] left-[-10%] w-[500px] h-[500px] bg-indigo-600 rounded-full mix-blend-screen filter blur-[150px] opacity-40 z-0 pointer-events-none"></div>
+	<div class="fixed bottom-[-10%] right-[-10%] w-[600px] h-[600px] bg-teal-600 rounded-full mix-blend-screen filter blur-[150px] opacity-30 z-0 pointer-events-none"></div>
+	<div class="fixed top-[40%] left-[60%] w-[400px] h-[400px] bg-fuchsia-700 rounded-full mix-blend-screen filter blur-[150px] opacity-30 z-0 pointer-events-none"></div>
+
+	<div class="relative z-10 container mx-auto px-4 py-8 max-w-7xl">
+		<header class="glass-panel rounded-2xl p-6 mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+			<div>
+				<h1 class="text-3xl font-bold text-white tracking-tight">Team Dashboard</h1>
+				<p class="text-slate-400 mt-1">
+					Welcome, <strong class="text-indigo-300" id="leader-name">...</strong>
+					(Team: <strong class="text-indigo-300" id="team-name">...</strong>)
+				</p>
+			</div>
+			<div class="flex items-center gap-4 flex-wrap">
+				<span class="text-sm text-slate-400">Last Sync: <span id="last-sync" class="text-white">...</span></span>
+				<a href="/dashboard/logout" class="bg-white/10 hover:bg-white/20 transition-colors border border-white/10 px-5 py-2 rounded-lg text-sm font-medium text-white backdrop-blur-md">Logout</a>
+			</div>
+		</header>
+
+		<div id="dashboard-error" class="hidden mb-8 rounded-xl border border-red-400/30 bg-red-500/20 px-4 py-3 text-red-100"></div>
+
+		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+			<div class="glass-panel rounded-2xl p-6 flex flex-col justify-center relative overflow-hidden">
+				<div class="absolute top-0 right-0 p-4 opacity-20">
+					<svg class="w-12 h-12" fill="currentColor" viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+				</div>
+				<span class="text-sm text-slate-400 font-medium uppercase tracking-wider mb-1">Team Members</span>
+				<strong class="text-3xl font-bold text-white" id="stat-members">0</strong>
+			</div>
+
+			<div class="glass-panel rounded-2xl p-6 flex flex-col justify-center relative overflow-hidden">
+				<div class="absolute top-0 right-0 p-4 opacity-20 text-rose-400">
+					<svg class="w-12 h-12" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+				</div>
+				<span class="text-sm text-slate-400 font-medium uppercase tracking-wider mb-1">Total Heartbeats</span>
+				<strong class="text-3xl font-bold text-white" id="stat-heartbeats">0</strong>
+			</div>
+
+			<div class="glass-panel rounded-2xl p-6 flex flex-col justify-center relative overflow-hidden">
+				<div class="absolute top-0 right-0 p-4 opacity-20 text-teal-400">
+					<svg class="w-12 h-12" fill="currentColor" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+				</div>
+				<span class="text-sm text-slate-400 font-medium uppercase tracking-wider mb-1">Total Char Activity</span>
+				<strong class="text-3xl font-bold text-white" id="stat-chars">0</strong>
+			</div>
+
+			<div class="glass-panel rounded-2xl p-6 flex flex-col justify-center relative overflow-hidden">
+				<div class="absolute top-0 right-0 p-4 opacity-20 text-amber-400">
+					<svg class="w-12 h-12" fill="currentColor" viewBox="0 0 24 24"><path d="M19.3 16.9c.4-.7.7-1.5.7-2.4 0-2.5-2-4.5-4.5-4.5S11 12 11 14.5s2 4.5 4.5 4.5c.9 0 1.7-.3 2.4-.7l3.2 3.2 1.4-1.4-3.2-3.2zm-3.8.1c-1.4 0-2.5-1.1-2.5-2.5s1.1-2.5 2.5-2.5 2.5 1.1 2.5 2.5-1.1 2.5-2.5 2.5zM12 20H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2h16c1.1 0 2 .9 2 2v4.1c-.8-.1-1.6-.1-2.5-.1 0 0 0-4 0-4H4v12h8v2z"/></svg>
+				</div>
+				<span class="text-sm text-slate-400 font-medium uppercase tracking-wider mb-1">Services Used</span>
+				<strong class="text-3xl font-bold text-white" id="stat-services">0</strong>
+			</div>
+
+			<div class="glass-panel rounded-2xl p-6 flex flex-col justify-center relative overflow-hidden">
+				<div class="absolute top-0 right-0 p-4 opacity-20 text-indigo-400">
+					<svg class="w-12 h-12" fill="currentColor" viewBox="0 0 24 24"><path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/></svg>
+				</div>
+				<span class="text-sm text-slate-400 font-medium uppercase tracking-wider mb-1">Peak Daily Activity</span>
+				<strong class="text-3xl font-bold text-white" id="stat-peak">0</strong>
+				<span class="text-xs text-indigo-300 mt-1" id="stat-peak-date">No activity yet</span>
+			</div>
+		</div>
+
+		<div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+			<div class="glass-panel rounded-2xl p-6">
+				<h2 class="text-xl font-semibold text-white mb-4">Daily Team Activity (Last 14 Days)</h2>
+				<div class="relative h-72 w-full">
+					<canvas id="teamActivityChart"></canvas>
+				</div>
+			</div>
+
+			<div class="glass-panel rounded-2xl p-6">
+				<h2 class="text-xl font-semibold text-white mb-4">User Contribution Comparison</h2>
+				<div class="relative h-72 w-full">
+					<canvas id="userContributionChart"></canvas>
+				</div>
+			</div>
+		</div>
+
+		<div class="glass-panel rounded-2xl p-6 overflow-hidden flex flex-col">
+			<h2 class="text-xl font-semibold text-white mb-4">Detailed User Metrics</h2>
+			<div class="overflow-x-auto">
+				<table class="w-full text-left border-collapse">
+					<thead>
+						<tr class="border-b border-white/10 text-slate-400 text-sm tracking-wider uppercase">
+							<th class="p-4 font-medium">Username</th>
+							<th class="p-4 font-medium">Role</th>
+							<th class="p-4 font-medium text-right">Heartbeats</th>
+							<th class="p-4 font-medium text-right text-emerald-400">Added</th>
+							<th class="p-4 font-medium text-right text-rose-400">Removed</th>
+							<th class="p-4 font-medium text-right text-amber-400">Modified</th>
+							<th class="p-4 font-medium text-right text-white">Total Activity</th>
+							<th class="p-4 font-medium text-right text-indigo-300">Efficiency*</th>
+						</tr>
+					</thead>
+					<tbody id="user-table-body" class="divide-y divide-white/5"></tbody>
+				</table>
+			</div>
+			<div class="mt-4 flex justify-between items-center text-xs text-slate-500">
+				<span>* Efficiency = Total Activity / Heartbeats (Avg Chars per Heartbeat)</span>
+			</div>
+		</div>
+	</div>
+
+	<script>
+		const leaderCredentials = ${leaderCredentials};
+		const DASHBOARD_REFRESH_INTERVAL_MS = 30000;
+		let teamActivityChartInstance = null;
+		let userContributionChartInstance = null;
+		let isDashboardLoading = false;
+
+		const formatNumber = (num) => new Intl.NumberFormat("en-US").format(Number(num || 0));
+
+		const formatDate = (dateStr) => {
+			if (!dateStr) {
+				return "No data yet";
+			}
+
+			const date = new Date(dateStr);
+			if (Number.isNaN(date.getTime())) {
+				return "No data yet";
+			}
+
+			return new Intl.DateTimeFormat("en-US", {
+				month: "short",
+				day: "numeric",
+				hour: "2-digit",
+				minute: "2-digit",
+			}).format(date);
+		};
+
+		const escapeHtmlClient = (unsafe) => {
+			return String(unsafe || "")
+				.replace(/&/g, "&amp;")
+				.replace(/</g, "&lt;")
+				.replace(/>/g, "&gt;")
+				.replace(/\"/g, "&quot;")
+				.replace(/'/g, "&#039;");
+		};
+
+		function showDashboardError(message) {
+			const errorEl = document.getElementById("dashboard-error");
+			errorEl.textContent = message;
+			errorEl.classList.remove("hidden");
+		}
+
+		function clearDashboardError() {
+			const errorEl = document.getElementById("dashboard-error");
+			errorEl.textContent = "";
+			errorEl.classList.add("hidden");
+		}
+
+		function buildInitials(username) {
+			const value = String(username || "").trim();
+			if (!value) {
+				return "??";
+			}
+
+			const chunk = value.slice(0, 2).toUpperCase();
+			return escapeHtmlClient(chunk);
+		}
+
+		function renderUserTable(users) {
+			const tbody = document.getElementById("user-table-body");
+
+			if (!users.length) {
+				tbody.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-slate-500">No user data available</td></tr>';
+				return;
+			}
+
+			const tableHtml = users.map((user) => {
+				const heartbeatCount = Number(user.heartbeat_count || 0);
+				const efficiency = heartbeatCount > 0
+					? Math.round(Number(user.total_activity || 0) / heartbeatCount)
+					: 0;
+				const roleValue = String(user.role || "member");
+				const roleLabel = roleValue.charAt(0).toUpperCase() + roleValue.slice(1);
+				const isLeader = roleValue.toLowerCase() === "leader";
+				const roleClass = isLeader
+					? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
+					: "bg-white/5 border border-white/10";
+
+				return "<tr class=\"hover:bg-white/5 transition-colors group\">"
+					+ "<td class=\"p-4 font-medium text-white\">"
+					+ "<div class=\"flex items-center gap-3\">"
+					+ "<div class=\"w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-fuchsia-500 flex items-center justify-center text-xs font-bold\">"
+					+ buildInitials(user.username)
+					+ "</div>"
+					+ escapeHtmlClient(user.username)
+					+ "</div>"
+					+ "</td>"
+					+ "<td class=\"p-4 text-slate-300\">"
+					+ "<span class=\"px-2 py-1 rounded-md text-xs font-medium "
+					+ roleClass
+					+ "\">"
+					+ escapeHtmlClient(roleLabel)
+					+ "</span>"
+					+ "</td>"
+					+ "<td class=\"p-4 text-right text-slate-300 font-mono\">"
+					+ formatNumber(user.heartbeat_count)
+					+ "</td>"
+					+ "<td class=\"p-4 text-right text-emerald-300 font-mono\">"
+					+ formatNumber(user.characters_added)
+					+ "</td>"
+					+ "<td class=\"p-4 text-right text-rose-300 font-mono\">"
+					+ formatNumber(user.characters_removed)
+					+ "</td>"
+					+ "<td class=\"p-4 text-right text-amber-300 font-mono\">"
+					+ formatNumber(user.characters_modified)
+					+ "</td>"
+					+ "<td class=\"p-4 text-right text-white font-bold font-mono group-hover:text-indigo-300 transition-colors\">"
+					+ formatNumber(user.total_activity)
+					+ "</td>"
+					+ "<td class=\"p-4 text-right text-indigo-200 font-mono\">"
+					+ formatNumber(efficiency)
+					+ "/hb</td>"
+					+ "</tr>";
+			}).join("");
+
+			tbody.innerHTML = tableHtml;
+		}
+
+		function renderCharts(daily, users) {
+			Chart.defaults.color = "rgba(255, 255, 255, 0.6)";
+			Chart.defaults.font.family = "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif";
+
+			const gridOptions = {
+				color: "rgba(255, 255, 255, 0.05)",
+				drawBorder: false,
+			};
+
+			const dailyCtx = document.getElementById("teamActivityChart").getContext("2d");
+			const gradientLine = dailyCtx.createLinearGradient(0, 0, 0, 400);
+			gradientLine.addColorStop(0, "rgba(45, 212, 191, 0.5)");
+			gradientLine.addColorStop(1, "rgba(45, 212, 191, 0.0)");
+
+			if (teamActivityChartInstance) {
+				teamActivityChartInstance.destroy();
+			}
+
+			teamActivityChartInstance = new Chart(dailyCtx, {
+				type: "line",
+				data: {
+					labels: daily.map((item) => {
+						const date = new Date(item.day + "T00:00:00");
+						return Number.isNaN(date.getTime()) ? item.day : (date.getMonth() + 1) + "/" + date.getDate();
+					}),
+					datasets: [{
+						label: "Total Character Activity",
+						data: daily.map((item) => Number(item.total_activity || 0)),
+						borderColor: "#2dd4bf",
+						backgroundColor: gradientLine,
+						borderWidth: 2,
+						pointBackgroundColor: "#0f766e",
+						pointBorderColor: "#2dd4bf",
+						pointBorderWidth: 2,
+						pointRadius: 4,
+						pointHoverRadius: 6,
+						tension: 0.4,
+						fill: true,
+					}],
+				},
+				options: {
+					responsive: true,
+					maintainAspectRatio: false,
+					plugins: {
+						legend: { display: false },
+						tooltip: {
+							backgroundColor: "rgba(15, 23, 42, 0.9)",
+							titleColor: "#fff",
+							bodyColor: "#cbd5e1",
+							borderColor: "rgba(255,255,255,0.1)",
+							borderWidth: 1,
+							padding: 10,
+							displayColors: false,
+							callbacks: {
+								label(context) {
+									return "Activity: " + formatNumber(context.raw);
+								},
+							},
+						},
+					},
+					scales: {
+						y: { grid: gridOptions, border: { display: false } },
+						x: { grid: gridOptions, border: { display: false } },
+					},
+				},
+			});
+
+			const userCtx = document.getElementById("userContributionChart").getContext("2d");
+			const bgColors = [
+				"rgba(99, 102, 241, 0.7)",
+				"rgba(168, 85, 247, 0.7)",
+				"rgba(236, 72, 153, 0.7)",
+				"rgba(14, 165, 233, 0.7)",
+				"rgba(16, 185, 129, 0.7)",
+			];
+			const borderColors = ["#6366f1", "#a855f7", "#ec4899", "#0ea5e9", "#10b981"];
+
+			if (userContributionChartInstance) {
+				userContributionChartInstance.destroy();
+			}
+
+			userContributionChartInstance = new Chart(userCtx, {
+				type: "bar",
+				data: {
+					labels: users.map((user) => user.username),
+					datasets: [{
+						label: "Total Activity",
+						data: users.map((user) => Number(user.total_activity || 0)),
+						backgroundColor: users.map((_, index) => bgColors[index % bgColors.length]),
+						borderColor: users.map((_, index) => borderColors[index % borderColors.length]),
+						borderWidth: 1,
+						borderRadius: 6,
+						barPercentage: 0.6,
+					}],
+				},
+				options: {
+					responsive: true,
+					maintainAspectRatio: false,
+					plugins: {
+						legend: { display: false },
+						tooltip: {
+							backgroundColor: "rgba(15, 23, 42, 0.9)",
+							titleColor: "#fff",
+							bodyColor: "#cbd5e1",
+							borderColor: "rgba(255,255,255,0.1)",
+							borderWidth: 1,
+							padding: 10,
+							callbacks: {
+								label(context) {
+									return formatNumber(context.raw) + " chars";
+								},
+							},
+						},
+					},
+					scales: {
+						y: { grid: gridOptions, border: { display: false } },
+						x: { grid: gridOptions, border: { display: false } },
+					},
+				},
+			});
+		}
+
+		function initDashboard(dashboardData) {
+			const leader = dashboardData.leader || {};
+			const summary = dashboardData.summary || {};
+			const users = Array.isArray(dashboardData.users) ? dashboardData.users : [];
+			const daily = Array.isArray(dashboardData.daily) ? dashboardData.daily : [];
+
+			document.getElementById("leader-name").textContent = leader.username || "Unknown Leader";
+			document.getElementById("team-name").textContent = leader.team_name || "Unknown Team";
+			document.getElementById("last-sync").textContent = formatDate(summary.last_heartbeat_at);
+
+			document.getElementById("stat-members").textContent = formatNumber(users.length);
+			document.getElementById("stat-heartbeats").textContent = formatNumber(summary.total_heartbeats);
+			document.getElementById("stat-chars").textContent = formatNumber(summary.total_character_changes);
+			document.getElementById("stat-services").textContent = formatNumber(summary.services_used);
+
+			if (daily.length > 0) {
+				const peakDay = daily.reduce((max, current) => {
+					return Number(current.total_activity || 0) > Number(max.total_activity || 0)
+						? current
+						: max;
+				}, daily[0]);
+
+				document.getElementById("stat-peak").textContent = formatNumber(peakDay.total_activity);
+
+				const peakDateObj = new Date(peakDay.day + "T00:00:00");
+				if (!Number.isNaN(peakDateObj.getTime())) {
+					document.getElementById("stat-peak-date").textContent = "on " + new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(peakDateObj);
+				}
+			}
+
+			renderUserTable(users);
+			renderCharts(daily, users);
+		}
+
+		async function loadDashboardData(options = {}) {
+			if (isDashboardLoading) {
+				return;
+			}
+
+			isDashboardLoading = true;
+			const suppressErrorBanner = Boolean(options.suppressErrorBanner);
+
+			try {
+				const response = await fetch("/api/team-info", {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify(leaderCredentials),
+				});
+
+				if (!response.ok) {
+					throw new Error("Failed to fetch team information");
+				}
+
+				const data = await response.json();
+				initDashboard(data);
+				clearDashboardError();
+			} catch (error) {
+				console.error("Dashboard fetch failed", error);
+				if (!suppressErrorBanner) {
+					showDashboardError("Unable to load team information right now. Please refresh and try again.");
+				}
+			} finally {
+				isDashboardLoading = false;
+			}
+		}
+
+		document.addEventListener("DOMContentLoaded", () => {
+			loadDashboardData();
+			window.setInterval(() => {
+				loadDashboardData({ suppressErrorBanner: true });
+			}, DASHBOARD_REFRESH_INTERVAL_MS);
+		});
+	</script>
+</body>
+</html>`;
 }
 
 async function initializeDatabase() {
@@ -538,6 +1069,47 @@ app.get("/dashboard/logout", (req, res) => {
 	res.redirect("/dashboard/login");
 });
 
+app.post("/api/team-info", async (req, res) => {
+	try {
+		const username = String(req.body.username || "").trim();
+		const secret = String(req.body.secret || "").trim();
+
+		if (!username || !secret) {
+			res.status(400).json({ error: "username and secret are required" });
+			return;
+		}
+
+		const leaderResult = await pool.query(
+			`SELECT u.id, u.username, u.team_id, t.name AS team_name
+			 FROM users u
+			 JOIN teams t ON t.id = u.team_id
+			 WHERE u.username = $1 AND u.token = $2 AND u.role = 'leader'`,
+			[username, secret],
+		);
+
+		if (leaderResult.rowCount === 0) {
+			res.status(401).json({ error: "Invalid leader credentials" });
+			return;
+		}
+
+		const leader = leaderResult.rows[0];
+		const dashboardData = await getTeamDashboardData(leader.team_id);
+
+		res.json({
+			leader: {
+				username: leader.username,
+				team_name: leader.team_name,
+			},
+			summary: dashboardData.summary,
+			users: dashboardData.users,
+			daily: dashboardData.daily,
+		});
+	} catch (error) {
+		console.error("Failed to fetch team information", error);
+		res.status(500).json({ error: "Unable to fetch team information" });
+	}
+});
+
 app.get("/dashboard", async (req, res) => {
 	try {
 		const leader = await getAuthenticatedLeader(req);
@@ -546,172 +1118,7 @@ app.get("/dashboard", async (req, res) => {
 			return;
 		}
 
-		const summaryResult = await pool.query(
-			`SELECT
-				COUNT(*)::INT AS total_heartbeats,
-				COALESCE(SUM(characters_added + characters_removed + characters_modified), 0)::INT AS total_character_changes,
-				COUNT(DISTINCT service)::INT AS services_used,
-				MAX(received_at) AS last_heartbeat_at
-			 FROM heartbeats
-			 WHERE team_id = $1`,
-			[leader.team_id],
-		);
-
-		const usersResult = await pool.query(
-			`SELECT
-				u.username,
-				u.role,
-				COUNT(h.id)::INT AS heartbeat_count,
-				COALESCE(SUM(h.characters_added), 0)::INT AS characters_added,
-				COALESCE(SUM(h.characters_removed), 0)::INT AS characters_removed,
-				COALESCE(SUM(h.characters_modified), 0)::INT AS characters_modified,
-				COALESCE(SUM(h.characters_added + h.characters_removed + h.characters_modified), 0)::INT AS total_activity
-			 FROM users u
-			 LEFT JOIN heartbeats h ON h.user_id = u.id
-			 WHERE u.team_id = $1
-			 GROUP BY u.id
-			 ORDER BY total_activity DESC, u.username ASC`,
-			[leader.team_id],
-		);
-
-		const dailyResult = await pool.query(
-			`SELECT
-				TO_CHAR(day::date, 'YYYY-MM-DD') AS day,
-				COALESCE(SUM(h.characters_added + h.characters_removed + h.characters_modified), 0)::INT AS total_activity,
-				COALESCE(COUNT(h.id), 0)::INT AS heartbeat_count
-			 FROM generate_series(CURRENT_DATE - INTERVAL '13 days', CURRENT_DATE, INTERVAL '1 day') AS day
-			 LEFT JOIN heartbeats h
-				ON DATE(h.received_at) = DATE(day)
-				AND h.team_id = $1
-			 GROUP BY day
-			 ORDER BY day ASC`,
-			[leader.team_id],
-		);
-
-		const summary = summaryResult.rows[0];
-		const users = usersResult.rows;
-		const daily = dailyResult.rows;
-
-	const totalMembers = users.length;
-	const userRows = users
-		.map(
-			(user) => `<tr>
-          <td>${escapeHtml(user.username)}</td>
-          <td>${escapeHtml(user.role)}</td>
-          <td>${escapeHtml(user.heartbeat_count)}</td>
-          <td>${escapeHtml(user.characters_added)}</td>
-          <td>${escapeHtml(user.characters_removed)}</td>
-          <td>${escapeHtml(user.characters_modified)}</td>
-          <td><strong>${escapeHtml(user.total_activity)}</strong></td>
-        </tr>`,
-		)
-		.join("");
-
-	const chartLabels = JSON.stringify(daily.map((row) => row.day));
-	const chartTeamActivity = JSON.stringify(daily.map((row) => row.total_activity));
-	const userLabels = JSON.stringify(users.map((row) => row.username));
-	const userTotals = JSON.stringify(users.map((row) => row.total_activity));
-
-	const dashboardHtml = `
-    <div class="panel">
-      <h1>Team Dashboard</h1>
-      <p>Welcome, <strong>${escapeHtml(leader.username)}</strong> (team: <strong>${escapeHtml(leader.team_name)}</strong>)</p>
-      <p><a href="/dashboard/logout">Logout</a></p>
-    </div>
-
-    <div class="panel cards">
-      <div class="card">
-        <span class="muted">Team Members</span>
-        <strong>${escapeHtml(totalMembers)}</strong>
-      </div>
-      <div class="card">
-        <span class="muted">Total Heartbeats</span>
-        <strong>${escapeHtml(summary.total_heartbeats || 0)}</strong>
-      </div>
-      <div class="card">
-        <span class="muted">Total Character Activity</span>
-        <strong>${escapeHtml(summary.total_character_changes || 0)}</strong>
-      </div>
-      <div class="card">
-        <span class="muted">Services Used</span>
-        <strong>${escapeHtml(summary.services_used || 0)}</strong>
-      </div>
-    </div>
-
-    <div class="panel">
-      <h2>Daily Team Activity (Last 14 Days)</h2>
-      <canvas id="teamActivityChart" height="120"></canvas>
-    </div>
-
-    <div class="panel">
-      <h2>User Contribution Comparison</h2>
-      <canvas id="userContributionChart" height="120"></canvas>
-    </div>
-
-    <div class="panel">
-      <h2>User Metrics</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Username</th>
-            <th>Role</th>
-            <th>Heartbeats</th>
-            <th>Added</th>
-            <th>Removed</th>
-            <th>Modified</th>
-            <th>Total Activity</th>
-          </tr>
-        </thead>
-        <tbody>${userRows || "<tr><td colspan=\"7\">No users found</td></tr>"}</tbody>
-      </table>
-      <p class="muted">Last heartbeat: ${escapeHtml(summary.last_heartbeat_at || "No heartbeat data yet")}</p>
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script>
-      const teamActivityCtx = document.getElementById("teamActivityChart").getContext("2d");
-      const userContributionCtx = document.getElementById("userContributionChart").getContext("2d");
-
-      new Chart(teamActivityCtx, {
-        type: "line",
-        data: {
-          labels: ${chartLabels},
-          datasets: [{
-            label: "Total Character Activity",
-            data: ${chartTeamActivity},
-            borderColor: "#1f6feb",
-            backgroundColor: "rgba(31, 111, 235, 0.2)",
-            tension: 0.25,
-            fill: true
-          }]
-        },
-        options: {
-          responsive: true,
-          plugins: { legend: { display: true } }
-        }
-      });
-
-      new Chart(userContributionCtx, {
-        type: "bar",
-        data: {
-          labels: ${userLabels},
-          datasets: [{
-            label: "Total Activity Per User",
-            data: ${userTotals},
-            backgroundColor: "rgba(15, 118, 110, 0.7)",
-            borderColor: "#0f766e",
-            borderWidth: 1
-          }]
-        },
-        options: {
-          responsive: true,
-          plugins: { legend: { display: true } }
-        }
-      });
-    </script>
-  `;
-
-		res.send(renderPage("Team Dashboard", dashboardHtml));
+		res.send(renderDashboardPage(leader.username, leader.token));
 	} catch (error) {
 		console.error("Failed to render dashboard", error);
 		res.status(500).send(renderError("Dashboard Error", "Unable to load team dashboard right now."));
