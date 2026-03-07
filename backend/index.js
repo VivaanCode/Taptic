@@ -41,6 +41,7 @@ const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const sessions = new Map();
 const socketPresenceById = new Map();
 const userSocketsByKey = new Map();
+const pendingTabRequests = new Map();
 
 function buildUserPresenceKey(teamName, username) {
 	return `${String(teamName || "").trim().toLowerCase()}::${String(username || "").trim().toLowerCase()}`;
@@ -1134,12 +1135,25 @@ io.on("connection", (socket) => {
 
 			// Send request to the first available socket for this user
 			const targetSocketId = onlineSocketIds[0];
-			let responseReceived = false;
+			const requestId = `${socket.id}_${Date.now()}_${Math.random()}`;
 			
-			// Set up a single timeout
+			console.log(`[getUserTabs] Creating request ${requestId} for ${targetUsername} from ${leaderUsername}`);
+			
+			// Store the pending request
+			pendingTabRequests.set(requestId, {
+				dashboardSocketId: socket.id,
+				targetUsername,
+				createdAt: Date.now(),
+			});
+			
+			// Set up timeout
 			const responseTimeout = setTimeout(() => {
-				if (responseReceived) return;
-				responseReceived = true;
+				const pending = pendingTabRequests.get(requestId);
+				if (!pending) return;
+				
+				pendingTabRequests.delete(requestId);
+				console.log(`[getUserTabs] Request ${requestId} timed out`);
+				
 				socket.emit("getUserTabs_response", {
 					status: "error",
 					error: "Request timeout - no response from client",
@@ -1147,34 +1161,16 @@ io.on("connection", (socket) => {
 					tabs: [],
 				});
 			}, 5000);
-
-			// Set up listener for client response
-			const responseHandler = (responsePayload) => {
-				if (responseReceived) return;
-				responseReceived = true;
-				clearTimeout(responseTimeout);
-				
-				console.log("=== INCOMING userTabs JSON ===");
-				console.log(JSON.stringify(responsePayload, null, 2));
-				console.log("==============================");
-				
-				socket.emit("getUserTabs_response", {
-					status: "success",
-					targetUsername,
-					tabs: responsePayload.userTabs || responsePayload.tabs || [],
-				});
-				
-				// Remove the one-time listener
-				socket.off("userTabs_response", responseHandler);
-			};
 			
-			socket.once("userTabs_response", responseHandler);
+			// Store timeout so we can clear it later
+			pendingTabRequests.get(requestId).timeout = responseTimeout;
 
 			// Send request to the client
+			console.log(`[getUserTabs] Sending request to extension socket ${targetSocketId}`);
 			io.to(targetSocketId).emit("getUserTabs_request", {
 				team,
-				requestId: socket.id + Date.now(),
-				responseSocketId: socket.id,
+				requestId,
+				targetUsername,
 			});
 		} catch (error) {
 			console.error("Get user tabs error", error);
@@ -1185,6 +1181,39 @@ io.on("connection", (socket) => {
 				tabs: [],
 			});
 		}
+	});
+
+	// Handle userTabs_response from extension
+	socket.on("userTabs_response", (payload) => {
+		const requestId = payload.requestId;
+		console.log(`[userTabs_response] Received response for request ${requestId}`);
+		console.log("=== INCOMING userTabs JSON ===");
+		console.log(JSON.stringify(payload, null, 2));
+		console.log("==============================");
+		
+		if (!requestId) {
+			console.warn("[userTabs_response] No requestId in payload");
+			return;
+		}
+		
+		const pending = pendingTabRequests.get(requestId);
+		if (!pending) {
+			console.warn(`[userTabs_response] No pending request found for ${requestId}`);
+			return;
+		}
+		
+		// Clear timeout and remove from pending
+		clearTimeout(pending.timeout);
+		pendingTabRequests.delete(requestId);
+		
+		console.log(`[userTabs_response] Forwarding response to dashboard socket ${pending.dashboardSocketId}`);
+		
+		// Send response to the dashboard socket
+		io.to(pending.dashboardSocketId).emit("getUserTabs_response", {
+			status: "success",
+			targetUsername: pending.targetUsername,
+			tabs: payload.userTabs || payload.tabs || [],
+		});
 	});
 
 	socket.on("message", (payload) => {
@@ -1326,6 +1355,19 @@ io.on("connection", (socket) => {
 	socket.on("disconnect", () => {
 		const removed = removeSocketPresence(socket.id);
 		emitPresenceUpdated(removed, false);
+		
+		// Clean up any pending tab requests for this socket
+		const requestsToCancel = [];
+		for (const [requestId, request] of pendingTabRequests.entries()) {
+			if (request.dashboardSocketId === socket.id) {
+				requestsToCancel.push(requestId);
+				if (request.timeout) {
+					clearTimeout(request.timeout);
+				}
+			}
+		}
+		requestsToCancel.forEach((requestId) => pendingTabRequests.delete(requestId));
+		
 		console.log(`Client disconnected: ${socket.id}`);
 	});
 });
@@ -1344,6 +1386,21 @@ setInterval(() => {
 	expiredSessions.forEach((sessionId) => sessions.delete(sessionId));
 	if (expiredSessions.length > 0) {
 		console.log(`Cleaned up ${expiredSessions.length} expired sessions`);
+	}
+	
+	// Also clean up old pending tab requests (older than 30 seconds)
+	const expiredRequests = [];
+	for (const [requestId, request] of pendingTabRequests.entries()) {
+		if (request.createdAt < now - 30000) {
+			expiredRequests.push(requestId);
+			if (request.timeout) {
+				clearTimeout(request.timeout);
+			}
+		}
+	}
+	expiredRequests.forEach((requestId) => pendingTabRequests.delete(requestId));
+	if (expiredRequests.length > 0) {
+		console.log(`Cleaned up ${expiredRequests.length} expired tab requests`);
 	}
 }, 5 * 60 * 1000);
 

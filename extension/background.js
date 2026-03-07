@@ -142,12 +142,10 @@ function connectSocket() {
           token: settings.token || "",
           requestId: data.requestId || ""
         };
-        console.log("Taptic: Sending userTabs response back to server", payload);
+        console.log("Taptic: Sending userTabs_response back to server", payload);
         
-        // Send response back to the requesting socket
-        if (data.responseSocketId) {
-          socket.emit("userTabs_response", payload);
-        }
+        // Send response back to the server
+        socket.emit("userTabs_response", payload);
       });
     });
   });
