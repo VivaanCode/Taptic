@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Seam",
+  "name": "Taptic",
   "version": "1.0.0",
   "description": "Track and manage group projects for corporations and schools",
   "action": {

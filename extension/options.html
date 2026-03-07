@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Seam - Settings</title>
+  <title>Taptic - Settings</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -86,7 +86,7 @@
 </head>
 <body>
   <div class="container">
-    <h1>Seam Settings</h1>
+    <h1>Taptic Settings</h1>
     <p class="subtitle">Configure your credentials and server connection</p>
 
     <div class="group">
@@ -115,13 +115,21 @@
       <h2>Server</h2>
       <div class="field">
         <label for="serverUrl">Server URL</label>
-        <input type="text" id="serverUrl" value="https://demo.vivaan.dev" />
+        <input type="text" id="serverUrl" value="https://taptic.live" />
       </div>
     </div>
 
     <div class="actions">
       <button id="saveBtn">Save Settings</button>
       <button class="btn-secondary" id="resetBtn">Reset</button>
+    </div>
+
+    <div class="group" style="margin-top: 30px;">
+      <h2>Debug</h2>
+      <div class="actions" style="margin-top: 10px;">
+        <button class="btn-secondary" id="forceTabsBtn">Force Send Tab Data</button>
+      </div>
+      <p class="hint">Manually triggers sending your open tabs to the server.</p>
     </div>
 
     <div class="status" id="status"></div>

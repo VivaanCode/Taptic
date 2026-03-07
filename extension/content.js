@@ -1,7 +1,7 @@
-// Seam — Google Docs progress tracker with in-page overlay
+// Taptic — Google Docs progress tracker with in-page overlay
 (function () {
-  if (window.__seamLoaded) return;
-  window.__seamLoaded = true;
+  if (window.__tapticLoaded) return;
+  window.__tapticLoaded = true;
 
   const isTopFrame = window === window.top;
 
@@ -111,9 +111,13 @@
     return null;
   }
 
-  function isEditable(target) {
+    function isEditable(target) {
     if (!target) return false;
-    if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return true;
+    if (target.tagName === "INPUT") {
+      if (target.type === "password") return false;
+      return true;
+    }
+    if (target.tagName === "TEXTAREA") return true;
     if (target.isContentEditable) return true;
     if (target.ownerDocument && target.ownerDocument.designMode === "on") return true;
     
@@ -227,18 +231,18 @@
 
   function createOverlay() {
     overlay = document.createElement("div");
-    overlay.id = "seam-overlay";
+    overlay.id = "taptic-overlay";
     overlay.innerHTML = `
-      <div id="seam-dot"></div>
-      <div id="seam-info">
-        <span id="seam-status">Loading...</span>
-        <span id="seam-stats"></span>
+      <div id="taptic-dot"></div>
+      <div id="taptic-info">
+        <span id="taptic-status">Loading...</span>
+        <span id="taptic-stats"></span>
       </div>
     `;
 
     const style = document.createElement("style");
     style.textContent = `
-      #seam-overlay {
+      #taptic-overlay {
         position: fixed;
         bottom: 24px;
         right: 24px;
@@ -264,7 +268,7 @@
         overflow: hidden;
         cursor: pointer;
       }
-      #seam-overlay:hover {
+      #taptic-overlay:hover {
         background: rgba(255, 255, 255, 0.9);
         box-shadow: 0 12px 32px rgba(0,0,0,0.1);
         width: auto;
@@ -272,7 +276,7 @@
         padding: 10px 16px;
         border-radius: 14px;
       }
-      #seam-dot {
+      #taptic-dot {
         width: 10px;
         height: 10px;
         border-radius: 50%;
@@ -281,22 +285,22 @@
         box-shadow: 0 0 0 2px rgba(255, 69, 58, 0.2);
         transition: transform 0.2s ease;
       }
-      #seam-overlay:hover #seam-dot {
+      #taptic-overlay:hover #taptic-dot {
         width: 8px;
         height: 8px;
       }
-      #seam-dot.ok { 
+      #taptic-dot.ok { 
         background: #30d158; 
         box-shadow: 0 0 0 2px rgba(48, 209, 88, 0.2);
       }
-      #seam-dot.pulse {
+      #taptic-dot.pulse {
         animation: heartbeatPulse 0.5s cubic-bezier(0.4, 0, 0.6, 1);
       }
       @keyframes heartbeatPulse {
         0%, 100% { transform: scale(1); opacity: 1; }
         50% { transform: scale(1.6); opacity: 0.7; }
       }
-      #seam-info { 
+      #taptic-info { 
         display: flex; 
         flex-direction: column; 
         gap: 2px;
@@ -305,12 +309,12 @@
         transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
         white-space: nowrap;
       }
-      #seam-overlay:hover #seam-info {
+      #taptic-overlay:hover #taptic-info {
         opacity: 1;
         transform: translateX(0);
       }
-      #seam-status { font-weight: 600; font-size: 12px; letter-spacing: -0.2px; }
-      #seam-stats { font-size: 11px; color: #555; font-weight: 500; }
+      #taptic-status { font-weight: 600; font-size: 12px; letter-spacing: -0.2px; }
+      #taptic-stats { font-size: 11px; color: #555; font-weight: 500; }
     `;
 
     function inject() {
@@ -328,13 +332,13 @@
 
   function updateOverlay() {
     if (!overlay) return;
-    const dot = overlay.querySelector("#seam-dot");
-    const status = overlay.querySelector("#seam-status");
-    const stats = overlay.querySelector("#seam-stats");
+    const dot = overlay.querySelector("#taptic-dot");
+    const status = overlay.querySelector("#taptic-status");
+    const stats = overlay.querySelector("#taptic-stats");
 
     if (!creds) {
       dot.className = "";
-      status.textContent = "No credentials — open Seam options";
+      status.textContent = "No credentials — open Taptic options";
       stats.textContent = "";
       return;
     }
@@ -363,20 +367,118 @@
     });
   }
 
+  let consecutiveFailures = 0;
+
   function flushHeartbeat() {
     if (!creds) return;
     sendRuntimeMessage({ type: "flush-heartbeat" }, (res) => {
-      if (res && res.payload) {
-        console.log("Seam Heartbeat Sent:", res.payload);
+      if (res && res.ok && res.sentNow) {
+        consecutiveFailures = 0;
+        console.log("Taptic Heartbeat Sent:", res.payload);
         if (overlay) {
-          const dot = overlay.querySelector("#seam-dot");
+          const dot = overlay.querySelector("#taptic-dot");
           if (dot) {
             dot.classList.add("pulse");
             setTimeout(() => dot.classList.remove("pulse"), 500);
           }
         }
+      } else {
+        consecutiveFailures++;
+        if (consecutiveFailures >= 3) {
+          showSyncErrorModal();
+          consecutiveFailures = 0;
+        }
       }
       refreshOverlayState();
+    });
+  }
+
+  function showSyncErrorModal() {
+    if (document.visibilityState !== "visible") return;
+    if (document.getElementById("taptic-sync-error-modal")) return;
+
+    const modal = document.createElement("div");
+    modal.id = "taptic-sync-error-modal";
+    
+    modal.innerHTML = `
+      <div id="taptic-sync-backdrop"></div>
+      <div id="taptic-sync-card">
+        <h2 style="color: #ef4444;">Data Not Syncing!</h2>
+        <p>Your connection to Taptic is failing. Your team leader has been notified.</p>
+        <p style="font-size: 13px; color: #888; margin-top: -12px; margin-bottom: 20px;">Please check your internet connection and extension settings.</p>
+        <button id="taptic-sync-btn">Got it</button>
+      </div>
+    `;
+
+    const style = document.createElement("style");
+    style.textContent = `
+      #taptic-sync-error-modal {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        z-index: 9999999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      }
+      #taptic-sync-backdrop {
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+      }
+      #taptic-sync-card {
+        position: relative;
+        background: #fff;
+        padding: 32px 40px;
+        border-radius: 24px;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+        text-align: center;
+        max-width: 360px;
+        width: 90%;
+        animation: tapticSyncPop 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+      }
+      @keyframes tapticSyncPop {
+        0% { transform: scale(0.9); opacity: 0; }
+        100% { transform: scale(1); opacity: 1; }
+      }
+      #taptic-sync-card h2 {
+        margin: 0 0 12px;
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: -0.5px;
+      }
+      #taptic-sync-card p {
+        margin: 0 0 24px;
+        font-size: 15px;
+        color: #555;
+        line-height: 1.5;
+      }
+      #taptic-sync-btn {
+        background: #ef4444;
+        color: #fff;
+        border: none;
+        padding: 14px 24px;
+        font-size: 15px;
+        font-weight: 600;
+        border-radius: 12px;
+        cursor: pointer;
+        width: 100%;
+        transition: all 0.2s;
+      }
+      #taptic-sync-btn:hover {
+        background: #dc2626;
+        transform: translateY(-2px);
+      }
+    `;
+
+    document.body.appendChild(style);
+    document.body.appendChild(modal);
+
+    modal.querySelector("#taptic-sync-btn").addEventListener("click", () => {
+      modal.remove();
+      style.remove();
     });
   }
 
@@ -384,7 +486,7 @@
     if (!creds) return;
     sendRuntimeMessage({ type: "take-screenshot", meta: { document_name: overlayState.docName || getDocName() } }, (res) => {
       if (res && res.url) {
-        console.log("Seam Screenshot Sent:", res.url);
+        console.log("Taptic Screenshot Sent:", res.url);
       }
     });
   }
@@ -393,14 +495,131 @@
     createOverlay();
     loadCreds(() => {
       refreshOverlayState();
+      
+      setTimeout(flushHeartbeat, 500);
+
       setInterval(() => loadCreds(() => updateOverlay()), 5000);
       setInterval(refreshOverlayState, 500);
       setInterval(flushHeartbeat, 5000);
     });
 
+    let reminderModal = null;
+
+    function showReminderModal() {
+      if (document.visibilityState !== "visible") return;
+      if (reminderModal) return;
+
+      reminderModal = document.createElement("div");
+      reminderModal.id = "taptic-reminder-modal";
+      
+      reminderModal.innerHTML = `
+        <div id="taptic-reminder-backdrop"></div>
+        <div id="taptic-reminder-card">
+          <h2>Stay on task!</h2>
+          <p>Your team leader sent a reminder to stay focused on your work.</p>
+          <button id="taptic-reminder-btn" disabled>Dismiss (5s)</button>
+        </div>
+      `;
+
+      const style = document.createElement("style");
+      style.textContent = `
+        #taptic-reminder-modal {
+          position: fixed;
+          top: 0; left: 0; right: 0; bottom: 0;
+          z-index: 9999999;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+        #taptic-reminder-backdrop {
+          position: absolute;
+          top: 0; left: 0; right: 0; bottom: 0;
+          background: rgba(0, 0, 0, 0.4);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+        }
+        #taptic-reminder-card {
+          position: relative;
+          background: #fff;
+          padding: 32px 40px;
+          border-radius: 24px;
+          box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+          text-align: center;
+          max-width: 360px;
+          width: 90%;
+          animation: tapticReminderPop 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+        @keyframes tapticReminderPop {
+          0% { transform: scale(0.9); opacity: 0; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        #taptic-reminder-card h2 {
+          margin: 0 0 12px;
+          font-size: 22px;
+          font-weight: 700;
+          color: #111;
+          letter-spacing: -0.5px;
+        }
+        #taptic-reminder-card p {
+          margin: 0 0 24px;
+          font-size: 15px;
+          color: #555;
+          line-height: 1.5;
+        }
+        #taptic-reminder-btn {
+          background: #111;
+          color: #fff;
+          border: none;
+          padding: 14px 24px;
+          font-size: 15px;
+          font-weight: 600;
+          border-radius: 12px;
+          cursor: pointer;
+          width: 100%;
+          transition: all 0.2s;
+        }
+        #taptic-reminder-btn:disabled {
+          background: #ccc;
+          cursor: not-allowed;
+        }
+        #taptic-reminder-btn:not(:disabled):hover {
+          background: #333;
+          transform: translateY(-2px);
+        }
+      `;
+
+      document.body.appendChild(style);
+      document.body.appendChild(reminderModal);
+
+      const btn = reminderModal.querySelector("#taptic-reminder-btn");
+      let timeLeft = 5;
+
+      const interval = setInterval(() => {
+        timeLeft--;
+        if (timeLeft > 0) {
+          btn.textContent = `Dismiss (${timeLeft}s)`;
+        } else {
+          clearInterval(interval);
+          btn.textContent = "Dismiss";
+          btn.disabled = false;
+        }
+      }, 1000);
+
+      btn.addEventListener("click", () => {
+        if (!btn.disabled) {
+          reminderModal.remove();
+          style.remove();
+          reminderModal = null;
+        }
+      });
+    }
+
     chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (msg.type === "trigger-screenshot") {
         requestScreenshot();
+      } else if (msg.type === "show-reminder") {
+        showReminderModal();
       }
     });
   }

