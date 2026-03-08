@@ -1151,9 +1151,9 @@
                 updateCurrentlyTypingDisplay(existingTyping);
                 updateAiEvaluationDisplay(existingEvaluation);
                 
-                // Start keystroke monitoring
+                // Start AI evaluation (keystroke logging is always on)
                 if (!isSelf) { // Don't monitor the leader themselves
-                    console.log("Starting keystroke monitoring for:", username);
+                    console.log("Starting AI evaluation for:", username);
                     socket.emit("start_keystroke_monitoring", {
                         leaderUsername: leaderCredentials.username,
                         leaderSecret: leaderCredentials.secret,
@@ -1175,7 +1175,7 @@
             modal.classList.add("hidden");
             modal.classList.remove("flex");
 
-            // Stop keystroke monitoring
+            // Stop AI evaluation (keystroke logging continues)
             if (detailedViewUsername) {
                 socket.emit("stop_keystroke_monitoring", {
                     team: currentTeamName,

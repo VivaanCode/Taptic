@@ -150,24 +150,6 @@ function connectSocket() {
     });
   });
 
-  socket.on("enable_keystroke_capture", (data) => {
-    console.log("Taptic: Enabling keystroke capture", data);
-    chrome.tabs.query({}, (tabs) => {
-      for (const tab of tabs) {
-        chrome.tabs.sendMessage(tab.id, { type: "enable-keystroke-capture" });
-      }
-    });
-  });
-
-  socket.on("disable_keystroke_capture", (data) => {
-    console.log("Taptic: Disabling keystroke capture", data);
-    chrome.tabs.query({}, (tabs) => {
-      for (const tab of tabs) {
-        chrome.tabs.sendMessage(tab.id, { type: "disable-keystroke-capture" });
-      }
-    });
-  });
-
   socket.on("disconnect", () => {});
   socket.on("connect_error", () => {});
 }
