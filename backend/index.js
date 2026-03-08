@@ -464,11 +464,11 @@ function serializeForInlineScript(value) {
 async function getTeamDashboardData(teamId) {
 	const summaryResult = await pool.query(
 		`SELECT
-			COUNT(*)::INT AS total_heartbeats,
+			COUNT(*)::INT AS total_pings,
 			COALESCE(SUM(characters_added + characters_removed + characters_modified), 0)::INT AS total_character_changes,
 			COUNT(DISTINCT service)::INT AS services_used,
-			MAX(received_at) AS last_heartbeat_at
-		 FROM heartbeats
+			MAX(received_at) AS last_ping_at
+		 FROM pings
 		 WHERE team_id = $1`,
 		[teamId],
 	);
@@ -477,16 +477,16 @@ async function getTeamDashboardData(teamId) {
 		`SELECT
 			u.username,
 			u.role,
-			COUNT(h.id)::INT AS heartbeat_count,
-			MIN(h.received_at) AS first_heartbeat_at,
-			MAX(h.received_at) AS last_heartbeat_at,
+			COUNT(h.id)::INT AS ping_count,
+			MIN(h.received_at) AS first_ping_at,
+			MAX(h.received_at) AS last_ping_at,
 			COALESCE(EXTRACT(EPOCH FROM (MAX(h.received_at) - MIN(h.received_at))) / 60, 0)::FLOAT AS tracked_minutes,
 			COALESCE(SUM(h.characters_added), 0)::INT AS characters_added,
 			COALESCE(SUM(h.characters_removed), 0)::INT AS characters_removed,
 			COALESCE(SUM(h.characters_modified), 0)::INT AS characters_modified,
 			COALESCE(SUM(h.characters_added + h.characters_removed + h.characters_modified), 0)::INT AS total_activity
 		 FROM users u
-		 LEFT JOIN heartbeats h ON h.user_id = u.id
+		 LEFT JOIN pings h ON h.user_id = u.id
 		 WHERE u.team_id = $1
 		 GROUP BY u.id
 		 ORDER BY total_activity DESC, u.username ASC`,
@@ -497,9 +497,9 @@ async function getTeamDashboardData(teamId) {
 		`SELECT
 			TO_CHAR(day::date, 'YYYY-MM-DD') AS day,
 			COALESCE(SUM(h.characters_added + h.characters_removed + h.characters_modified), 0)::INT AS total_activity,
-			COALESCE(COUNT(h.id), 0)::INT AS heartbeat_count
+			COALESCE(COUNT(h.id), 0)::INT AS ping_count
 		 FROM generate_series(CURRENT_DATE - INTERVAL '13 days', CURRENT_DATE, INTERVAL '1 day') AS day
-		 LEFT JOIN heartbeats h
+		 LEFT JOIN pings h
 			ON DATE(h.received_at) = DATE(day)
 			AND h.team_id = $1
 		 GROUP BY day
@@ -568,7 +568,7 @@ async function initializeDatabase() {
 			UNIQUE (team_id, username)
 		);
 
-		CREATE TABLE IF NOT EXISTS heartbeats (
+		CREATE TABLE IF NOT EXISTS pings (
 			id BIGSERIAL PRIMARY KEY,
 			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 			team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
@@ -581,16 +581,16 @@ async function initializeDatabase() {
 		);
 
 		CREATE INDEX IF NOT EXISTS idx_users_team_id ON users(team_id);
-		CREATE INDEX IF NOT EXISTS idx_heartbeats_team_id ON heartbeats(team_id);
-		CREATE INDEX IF NOT EXISTS idx_heartbeats_user_id ON heartbeats(user_id);
-		CREATE INDEX IF NOT EXISTS idx_heartbeats_received_at ON heartbeats(received_at);
+		CREATE INDEX IF NOT EXISTS idx_pings_team_id ON pings(team_id);
+		CREATE INDEX IF NOT EXISTS idx_pings_user_id ON pings(user_id);
+		CREATE INDEX IF NOT EXISTS idx_pings_received_at ON pings(received_at);
 	`);
 
 	await pool.query(`
 		ALTER TABLE teams ADD COLUMN IF NOT EXISTS leader_user_id INTEGER;
 		ALTER TABLE teams ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 		ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
-		ALTER TABLE heartbeats ADD COLUMN IF NOT EXISTS received_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+		ALTER TABLE pings ADD COLUMN IF NOT EXISTS received_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 	`);
 
 	await pool.query(`
@@ -1255,7 +1255,7 @@ io.on("connection", (socket) => {
 		io.emit("message", payload);
 	});
 
-	socket.on("heartbeat", async (payload = {}) => {
+	socket.on("ping", async (payload = {}) => {
 		const username = String(payload.username ?? payload.clientUsername ?? "").trim();
 		const team = String(payload.team ?? payload.clientTeam ?? "").trim();
 		const token = String(payload.token ?? payload.clientToken ?? "").trim();
@@ -1266,18 +1266,18 @@ io.on("connection", (socket) => {
 		const documentName = String(payload.document_name ?? payload.documentName ?? "").trim();
 
 		if (!username || !team || !token || !service) {
-			console.warn(`Invalid heartbeat from ${socket.id}: missing username, team, token, or service`);
+			console.warn(`Invalid ping from ${socket.id}: missing username, team, token, or service`);
 			return;
 		}
 
 		// Input validation
 		if (username.length > 100 || team.length > 100 || service.length > 200) {
-			console.warn(`Invalid heartbeat from ${socket.id}: field too long`);
+			console.warn(`Invalid ping from ${socket.id}: field too long`);
 			return;
 		}
 
 		if (documentName.length > 500) {
-			console.warn(`Invalid heartbeat from ${socket.id}: document name too long`);
+			console.warn(`Invalid ping from ${socket.id}: document name too long`);
 			return;
 		}
 
@@ -1290,13 +1290,13 @@ io.on("connection", (socket) => {
 			charactersRemoved > 1000000 ||
 			charactersModified > 1000000
 		) {
-			console.warn(`Invalid heartbeat from ${socket.id}: character counts out of range`);
+			console.warn(`Invalid ping from ${socket.id}: character counts out of range`);
 			return;
 		}
 
 		if (service === "google_docs" && !documentName) {
 			console.warn(
-				`Invalid heartbeat from ${socket.id}: service is google_docs but document_name is missing`,
+				`Invalid ping from ${socket.id}: service is google_docs but document_name is missing`,
 			);
 			return;
 		}
@@ -1305,7 +1305,7 @@ io.on("connection", (socket) => {
 			const authRow = await authenticateSocketIdentity(username, team, token);
 
 			if (!authRow) {
-				console.warn(`Rejected heartbeat from ${socket.id}: invalid username/token/team combination`);
+				console.warn(`Rejected ping from ${socket.id}: invalid username/token/team combination`);
 				return;
 			}
 
@@ -1325,7 +1325,7 @@ io.on("connection", (socket) => {
 			}
 
 			await pool.query(
-				`INSERT INTO heartbeats(
+				`INSERT INTO pings(
 					user_id,
 					team_id,
 					service,
@@ -1345,7 +1345,7 @@ io.on("connection", (socket) => {
 				],
 			);
 
-			io.emit("heartbeat_saved", {
+			io.emit("ping_saved", {
 				team_id: authRow.team_id,
 				received_at: new Date().toISOString(),
 			});
@@ -1356,11 +1356,11 @@ io.on("connection", (socket) => {
 				charactersModified === 0;
 
 			if (noCharacterChanges) {
-				console.log(`heartbeat received from ${username}`);
+				console.log(`ping received from ${username}`);
 				return;
 			}
 
-			console.log("Heartbeat received:", {
+			console.log("Ping received:", {
 				socketId: socket.id,
 				username,
 				team,
@@ -1371,7 +1371,7 @@ io.on("connection", (socket) => {
 				document_name: documentName || null,
 			});
 		} catch (error) {
-			console.error(`Failed to process heartbeat from ${socket.id}`, error);
+			console.error(`Failed to process ping from ${socket.id}`, error);
 		}
 	});
 

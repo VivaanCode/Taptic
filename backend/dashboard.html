@@ -75,8 +75,8 @@
                 <div class="absolute top-0 right-0 p-4 opacity-20">
                     <i class="ph ph-heartbeat kpi-icon"></i>
                 </div>
-                <span class="text-sm font-medium uppercase tracking-wider mb-1 pr-8" style="color: var(--color-text-muted);">Total Heartbeats</span>
-                <strong class="text-3xl font-bold" style="color: var(--color-text-strong);" id="stat-heartbeats">0</strong>
+                <span class="text-sm font-medium uppercase tracking-wider mb-1 pr-8" style="color: var(--color-text-muted);">Total Pings</span>
+                <strong class="text-3xl font-bold" style="color: var(--color-text-strong);" id="stat-pings">0</strong>
             </div>
 
             <div class="glass-panel rounded-2xl p-6 flex flex-col justify-center relative overflow-hidden">
@@ -139,7 +139,7 @@
                         <tr class="border-b border-black/5 text-sm tracking-wider uppercase" style="color: var(--color-text-muted);">
                             <th class="p-4 font-medium">Username</th>
                             <th class="p-4 font-medium">Role</th>
-                            <th class="p-4 font-medium text-right">Heartbeats</th>
+                            <th class="p-4 font-medium text-right">Pings</th>
                             <th class="p-4 font-medium text-right" style="color: var(--color-kpi-added);">Words Added</th>
                             <th class="p-4 font-medium text-right" style="color: var(--color-kpi-removed);">Words Removed</th>
                             <th class="p-4 font-medium text-right" style="color: var(--color-kpi-modified);">Words Modified</th>
@@ -152,7 +152,7 @@
                 </table>
             </div>
             <div class="mt-4 flex justify-between items-center text-xs" style="color: var(--color-text-muted);">
-                <span>* Efficiency = Total Words / Active Minutes (between first and last heartbeat)</span>
+                <span>* Efficiency = Total Words / Active Minutes (between first and last ping)</span>
             </div>
         </div>
     </div>
@@ -213,8 +213,8 @@
                                     <span id="detailed-view-activity" class="font-medium" style="color: var(--color-text-strong);">0 words</span>
                                 </div>
                                 <div>
-                                    <span class="block" style="color: var(--color-text-muted);">Heartbeats</span>
-                                    <span id="detailed-view-heartbeats" class="font-medium" style="color: var(--color-text-strong);">0</span>
+                                    <span class="block" style="color: var(--color-text-muted);">Pings</span>
+                                    <span id="detailed-view-pings" class="font-medium" style="color: var(--color-text-strong);">0</span>
                                 </div>
                                 <div>
                                     <span class="block" style="color: var(--color-text-muted);">Efficiency (WPM)</span>
@@ -553,7 +553,7 @@
                                 ${escapeHtml(roleLabel)}
                             </span>
                         </td>
-                        <td class="p-4 text-right font-mono" style="color: var(--color-text-soft);">${formatNumber(user.heartbeat_count)}</td>
+                        <td class="p-4 text-right font-mono" style="color: var(--color-text-soft);">${formatNumber(user.ping_count)}</td>
                         <td class="p-4 text-right font-mono" style="color: var(--color-kpi-added);">${formatNumber(Math.floor(user.characters_added / 5))}</td>
                         <td class="p-4 text-right font-mono" style="color: var(--color-kpi-removed);">${formatNumber(Math.floor(user.characters_removed / 5))}</td>
                         <td class="p-4 text-right font-mono" style="color: var(--color-kpi-modified);">${formatNumber(Math.floor(user.characters_modified / 5))}</td>
@@ -877,7 +877,7 @@
             document.getElementById("detailed-view-role").textContent = toRoleLabel(userData.role);
             const totalWords = Math.floor(Number(userData.total_activity || 0) / 5);
             document.getElementById("detailed-view-activity").textContent = `${formatNumber(totalWords)} words`;
-            document.getElementById("detailed-view-heartbeats").textContent = formatNumber(userData.heartbeat_count);
+            document.getElementById("detailed-view-pings").textContent = formatNumber(userData.ping_count);
             
             const wpm = String(getWordsPerMinute(userData));
             document.getElementById("detailed-view-efficiency").textContent = `${wpm} wpm`;
@@ -989,10 +989,10 @@
 
             document.getElementById("leader-name").textContent = leader.username || "...";
             document.getElementById("team-name").textContent = leader.team_name || "...";
-            document.getElementById("last-sync").textContent = formatDate(summary.last_heartbeat_at);
+            document.getElementById("last-sync").textContent = formatDate(summary.last_ping_at);
 
             document.getElementById("stat-members").textContent = formatNumber(latestUsers.length);
-            document.getElementById("stat-heartbeats").textContent = formatNumber(summary.total_heartbeats);
+            document.getElementById("stat-pings").textContent = formatNumber(summary.total_pings);
             document.getElementById("stat-chars").textContent = formatNumber(summary.total_character_changes);
             document.getElementById("stat-services").textContent = formatNumber(summary.services_used);
 
@@ -1075,7 +1075,7 @@
             }, waitMs);
         };
 
-        socket.on("heartbeat_saved", (event) => {
+        socket.on("ping_saved", (event) => {
             if (!event || !event.team_id || !currentTeamId) {
                 return;
             }

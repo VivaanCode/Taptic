@@ -9,7 +9,7 @@ importScripts("socket.io.min.js");
 function getDefaultState() {
   return {
     docName: "Untitled",
-    lastHeartbeatStatus: "waiting",
+    lastPingStatus: "waiting",
     visible: {
       charactersAdded: 0,
       charactersRemoved: 0,
@@ -212,17 +212,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     sendResponse({
       visible: state.visible,
       docName: state.docName,
-      lastHeartbeatStatus: state.lastHeartbeatStatus,
+      lastPingStatus: state.lastPingStatus,
       connectionStatus: socket && socket.connected ? "connected" : "disconnected"
     });
     return false;
   }
 
-  if (msg.type === "flush-heartbeat" && tabId !== null) {
+  if (msg.type === "flush-ping" && tabId !== null) {
     const state = getState(tabId);
     loadSettings((settings) => {
       if (!settings.username || !settings.team || !settings.token) {
-        state.lastHeartbeatStatus = "missing credentials";
+        state.lastPingStatus = "missing credentials";
         sendResponse({ ok: false, error: "missing credentials" });
         return;
       }
@@ -245,8 +245,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         document_name: state.docName || "Untitled"
       };
 
-      const sentNow = emitOrQueue("heartbeat", payload);
-      state.lastHeartbeatStatus = sentNow ? "sent" : "queued";
+      const sentNow = emitOrQueue("ping", payload);
+      state.lastPingStatus = sentNow ? "sent" : "queued";
       state.pending = {
         charactersAdded: 0,
         charactersRemoved: 0,
