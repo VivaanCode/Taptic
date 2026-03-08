@@ -501,17 +501,36 @@
   }
 
   if (isTopFrame) {
-    // Detect /install page and open extension settings
-    if (window.location.pathname === "/install" && window.tapticInstallData) {
-      const data = window.tapticInstallData;
-      if (data.username && data.team && data.token) {
-        // Send message to background to open settings page
+    // Detect /install links and open extension options with prefilled settings.
+    const normalizedPath = window.location.pathname.replace(/\/+$/, "") || "/";
+    if (normalizedPath === "/install") {
+      const params = new URLSearchParams(window.location.search || "");
+      const installData = {
+        username: params.get("username") || "",
+        team: params.get("team") || "",
+        token: params.get("token") || "",
+        serverUrl: params.get("serverUrl") || window.location.origin
+      };
+
+      if (!installData.username || !installData.team || !installData.token) {
+        const pageData = window.tapticInstallData || {};
+        installData.username = installData.username || String(pageData.username || "");
+        installData.team = installData.team || String(pageData.team || "");
+        installData.token = installData.token || String(pageData.token || "");
+        installData.serverUrl = installData.serverUrl || String(pageData.serverUrl || window.location.origin);
+      }
+
+      const hasInstallCredentials = installData.username && installData.team && installData.token;
+      const alreadyHandled = sessionStorage.getItem("tapticInstallHandled") === "1";
+
+      if (hasInstallCredentials && !alreadyHandled) {
+        sessionStorage.setItem("tapticInstallHandled", "1");
         sendRuntimeMessage({
           type: "open-settings-page",
-          username: data.username,
-          team: data.team,
-          token: data.token,
-          serverUrl: data.serverUrl || window.location.origin
+          username: installData.username,
+          team: installData.team,
+          token: installData.token,
+          serverUrl: installData.serverUrl
         });
       }
     }

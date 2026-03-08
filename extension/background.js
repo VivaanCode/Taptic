@@ -229,7 +229,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       `&team=${encodeURIComponent(team || "")}` +
       `&token=${encodeURIComponent(token || "")}` +
       `&serverUrl=${encodeURIComponent(serverUrl || "")}`;
-    chrome.tabs.create({ url });
+    if (tabId !== null) {
+      chrome.tabs.update(tabId, { url });
+    } else {
+      chrome.tabs.create({ url });
+    }
     sendResponse({ ok: true });
     return false;
   }
