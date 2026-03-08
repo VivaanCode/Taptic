@@ -384,9 +384,10 @@ async function renderTeamSuccessPage(teamName, users, serverUrl = "") {
 	const userRows = users
 		.map(
 			(user) => {
-				const autoSetupUrl = `chrome-extension://${EXTENSION_ID}/options.html?username=${encodeURIComponent(user.username)}&team=${encodeURIComponent(teamName)}&token=${encodeURIComponent(user.token)}&serverUrl=${encodeURIComponent(serverUrl)}`;
+				const installUrl = `${serverUrl || "https://taptic.live"}/install?username=${encodeURIComponent(user.username)}&team=${encodeURIComponent(teamName)}&token=${encodeURIComponent(user.token)}&serverUrl=${encodeURIComponent(serverUrl)}`;
+				const safeInstallUrl = escapeHtml(installUrl);
 				return `
-            <tr class="border-b border-white/10 table-row-hover" style="color: var(--color-text-main);">
+				<tr class="border-b border-black/5 table-row-hover" style="color: var(--color-text-main);">
               <td class="px-4 py-3">${escapeHtml(user.username)}</td>
               <td class="px-4 py-3">
                 <span class="role-pill ${
@@ -398,15 +399,15 @@ async function renderTeamSuccessPage(teamName, users, serverUrl = "") {
               <td class="px-4 py-3">
                 <div class="space-y-2">
                   <div class="flex items-center gap-2 flex-wrap">
-                    <code class="text-xs flex-1 min-w-[200px] break-all" style="color: var(--color-accent);" data-token="${escapeHtml(user.token)}">${escapeHtml(user.token)}</code>
-                    <button type="button" class="copy-token-btn px-2 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap" data-token="${escapeHtml(user.token)}" style="background: var(--color-accent-glow); color: var(--color-accent); border: 1px solid var(--color-accent); cursor: pointer;">Copy</button>
+	                    <a href="${safeInstallUrl}" class="text-xs flex-1 min-w-[220px] break-all underline-offset-2 hover:underline" style="color: var(--color-accent);" target="_blank" rel="noopener noreferrer">${safeInstallUrl}</a>
+	                    <button type="button" class="copy-install-btn px-2 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap" data-link="${safeInstallUrl}" style="background: var(--color-accent-glow); color: var(--color-accent); border: 1px solid var(--color-accent); cursor: pointer;">Copy Link</button>
                   </div>
-                  <p class="text-xs italic" style="color: var(--color-text-muted);">⚠️ This is the last time you will see this token</p>
+	                  <p class="text-xs italic" style="color: var(--color-text-muted);">Open this link to install Taptic and auto-fill this user's credentials.</p>
                   <div>
-                    <p class="text-xs mb-1" style="color: var(--color-text-muted);">Auto-setup link for team members:</p>
-                    <a href="${autoSetupUrl}" class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors" style="background: var(--color-screen-btn-bg); color: var(--color-screen-btn-text); border: 1px solid var(--color-screen-btn-border);">
+	                    <p class="text-xs mb-1" style="color: var(--color-text-muted);">Install endpoint:</p>
+	                    <a href="${safeInstallUrl}" class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors" style="background: var(--color-screen-btn-bg); color: var(--color-screen-btn-text); border: 1px solid var(--color-screen-btn-border);" target="_blank" rel="noopener noreferrer">
                       <i class="ph ph-download"></i>
-                      Auto-Setup Link
+	                      Open Install Link
                     </a>
                   </div>
                 </div>
@@ -476,7 +477,9 @@ async function getTeamDashboardData(teamId) {
 			u.username,
 			u.role,
 			COUNT(h.id)::INT AS heartbeat_count,
+			MIN(h.received_at) AS first_heartbeat_at,
 			MAX(h.received_at) AS last_heartbeat_at,
+			COALESCE(EXTRACT(EPOCH FROM (MAX(h.received_at) - MIN(h.received_at))) / 60, 0)::FLOAT AS tracked_minutes,
 			COALESCE(SUM(h.characters_added), 0)::INT AS characters_added,
 			COALESCE(SUM(h.characters_removed), 0)::INT AS characters_removed,
 			COALESCE(SUM(h.characters_modified), 0)::INT AS characters_modified,
@@ -614,6 +617,25 @@ app.get("/", async (req, res) => {
 		console.error("Failed to load home page", error);
 		res.status(500).send(await renderErrorPage("Server Error", "Unable to load the home page right now."));
 	}
+});
+
+app.get("/install", (req, res) => {
+	const { username, team, token, serverUrl } = req.query;
+	if (username && team && token) {
+		const autoSetupUrl =
+			`chrome-extension://${EXTENSION_ID}/options.html?username=` +
+			encodeURIComponent(username) +
+			`&team=` +
+			encodeURIComponent(team) +
+			`&token=` +
+			encodeURIComponent(token) +
+			`&serverUrl=` +
+			encodeURIComponent(serverUrl || `${req.protocol}://${req.get("host")}`);
+		res.redirect(autoSetupUrl);
+		return;
+	}
+
+	res.redirect("https://chromewebstore.google.com/detail/" + EXTENSION_ID);
 });
 
 app.get("/teams/new", async (req, res) => {
@@ -1415,4 +1437,8 @@ startServer().catch((error) => {
 	console.error("Server startup failed", error);
 	process.exit(1);
 });
+
+
+
+
 

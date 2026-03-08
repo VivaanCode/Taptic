@@ -18,9 +18,9 @@
   <link rel="stylesheet" href="/static/dashboard-theme.css" />
 </head>
 <body class="theme-page antialiased relative min-h-screen overflow-x-hidden">
-  <div class="fixed top-[-10%] left-[-10%] w-[500px] h-[500px] blob opacity-40 z-0" style="background: var(--color-blob-indigo);"></div>
-  <div class="fixed bottom-[-10%] right-[-10%] w-[600px] h-[600px] blob opacity-30 z-0" style="background: var(--color-blob-teal);"></div>
-  <div class="fixed top-[40%] left-[60%] w-[400px] h-[400px] blob opacity-30 z-0" style="background: var(--color-blob-purple);"></div>
+  <div class="fixed top-[-10%] left-[-10%] w-[500px] h-[500px] blob opacity-80 z-0" style="background: var(--color-blob-indigo);"></div>
+  <div class="fixed bottom-[-10%] right-[-10%] w-[600px] h-[600px] blob opacity-80 z-0" style="background: var(--color-blob-teal);"></div>
+  <div class="fixed top-[40%] left-[60%] w-[400px] h-[400px] blob opacity-80 z-0" style="background: var(--color-blob-purple);"></div>
 
   <main class="relative z-10 min-h-screen flex items-center justify-center px-4 py-10">
     <section class="glass-panel w-full max-w-4xl rounded-2xl p-6 sm:p-8">
@@ -34,18 +34,18 @@
         </p>
         <div class="mt-3 space-y-2">
           <p class="text-sm" style="color: var(--color-text-muted);">
-            📋 Share each member's <strong>Auto-Setup Link</strong> with that user—they can open it to instantly configure their extension.
+            📋 Share each member's <strong>Install Link</strong> with that user. It opens Taptic install, then forwards into token auto-setup.
           </p>
           <p class="text-sm" style="color: var(--color-text-muted);">
-            🔐 You can also manually copy each member's token to share. The leader token is used to log into the dashboard.
+            🔐 Secret tokens are hidden here for safety. Use copy-link to share credentials securely.
           </p>
         </div>
       </div>
 
-      <div class="overflow-x-auto rounded-lg border border-white/10">
+      <div class="overflow-x-auto rounded-lg border border-black/5">
         <table class="w-full text-sm">
           <thead>
-            <tr class="border-b border-white/10" style="background: rgba(255, 255, 255, 0.02);">
+            <tr class="border-b border-black/5" style="background: rgba(0, 0, 0, 0.02);">
               <th class="px-4 py-3 text-left font-semibold" style="color: var(--color-text-strong);">
                 <i class="ph ph-user mr-1"></i>Username
               </th>
@@ -53,7 +53,7 @@
                 <i class="ph ph-shield mr-1"></i>Role
               </th>
               <th class="px-4 py-3 text-left font-semibold" style="color: var(--color-text-strong);">
-                <i class="ph ph-key mr-1"></i>Assigned Token
+                <i class="ph ph-link mr-1"></i>Install Link
               </th>
             </tr>
           </thead>
@@ -66,7 +66,7 @@
       <div class="mt-6 grid gap-3 sm:grid-cols-2">
         <a 
           href="/dashboard/login" 
-          class="flex items-center justify-center gap-2 p-3 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors font-medium"
+          class="flex items-center justify-center gap-2 p-3 rounded-lg border border-black/5 bg-black/5 hover:bg-black/10 transition-colors font-medium text-slate-700"
           style="color: var(--color-accent);"
         >
           <i class="ph-fill ph-shield-check"></i>
@@ -75,7 +75,7 @@
 
         <a 
           href="/teams/new" 
-          class="flex items-center justify-center gap-2 p-3 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors font-medium"
+          class="flex items-center justify-center gap-2 p-3 rounded-lg border border-black/5 bg-black/5 hover:bg-black/10 transition-colors font-medium text-slate-700"
           style="color: var(--color-text-strong);"
         >
           <i class="ph-fill ph-plus-circle"></i>
@@ -86,11 +86,11 @@
   </main>
 
   <script>
-    document.querySelectorAll('.copy-token-btn').forEach(button => {
+    document.querySelectorAll('.copy-install-btn').forEach(button => {
       button.addEventListener('click', (e) => {
         e.preventDefault();
-        const token = button.getAttribute('data-token');
-        navigator.clipboard.writeText(token).then(() => {
+        const link = button.getAttribute('data-link');
+        navigator.clipboard.writeText(link).then(() => {
           const originalText = button.textContent;
           button.textContent = '✓ Copied!';
           button.style.background = 'var(--color-screen-btn-bg-hover)';
@@ -99,8 +99,8 @@
             button.style.background = '';
           }, 2000);
         }).catch(err => {
-          console.error('Failed to copy token:', err);
-          alert('Failed to copy token');
+          console.error('Failed to copy install link:', err);
+          alert('Failed to copy install link');
         });
       });
     });
