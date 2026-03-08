@@ -37,7 +37,10 @@
             📋 Share each member's <strong>Install Link</strong> with that user. It opens Taptic install, then forwards into token auto-setup.
           </p>
           <p class="text-sm" style="color: var(--color-text-muted);">
-            🔐 Secret tokens are hidden here for safety. Use copy-link to share credentials securely.
+            Open this link to install Taptic and auto-fill this user's credentials.
+          </p>
+          <p class="text-sm" style="color: var(--color-text-muted);">
+            🔐 Leader token is shown for dashboard login. Member rows only show install links.
           </p>
         </div>
       </div>
@@ -53,7 +56,7 @@
                 <i class="ph ph-shield mr-1"></i>Role
               </th>
               <th class="px-4 py-3 text-left font-semibold" style="color: var(--color-text-strong);">
-                <i class="ph ph-link mr-1"></i>Install Link
+                <i class="ph ph-link mr-1"></i>Install Link / Leader Token
               </th>
             </tr>
           </thead>
@@ -86,11 +89,11 @@
   </main>
 
   <script>
-    document.querySelectorAll('.copy-install-btn').forEach(button => {
+    document.querySelectorAll('.copy-value-btn').forEach(button => {
       button.addEventListener('click', (e) => {
         e.preventDefault();
-        const link = button.getAttribute('data-link');
-        navigator.clipboard.writeText(link).then(() => {
+        const value = button.getAttribute('data-value');
+        navigator.clipboard.writeText(value).then(() => {
           const originalText = button.textContent;
           button.textContent = '✓ Copied!';
           button.style.background = 'var(--color-screen-btn-bg-hover)';
@@ -99,8 +102,8 @@
             button.style.background = '';
           }, 2000);
         }).catch(err => {
-          console.error('Failed to copy install link:', err);
-          alert('Failed to copy install link');
+          console.error('Failed to copy value:', err);
+          alert('Failed to copy value');
         });
       });
     });

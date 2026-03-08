@@ -376,7 +376,7 @@ async function renderErrorPage(title, message) {
 		.replace("__ERROR_MESSAGE__", escapeHtml(message));
 }
 
-const EXTENSION_ID = process.env.EXTENSION_ID || "nhbihphmembphkpkhfoodacaeelhhmai";
+const EXTENSION_ID = process.env.EXTENSION_ID || "klniilncinffnpjkdnocpnbhkhacpkof";
 
 async function renderTeamSuccessPage(teamName, users, serverUrl = "") {
 	const template = await getTeamSuccessTemplate();
@@ -386,6 +386,15 @@ async function renderTeamSuccessPage(teamName, users, serverUrl = "") {
 			(user) => {
 				const installUrl = `${serverUrl || "https://taptic.live"}/install?username=${encodeURIComponent(user.username)}&team=${encodeURIComponent(teamName)}&token=${encodeURIComponent(user.token)}&serverUrl=${encodeURIComponent(serverUrl)}`;
 				const safeInstallUrl = escapeHtml(installUrl);
+				const safeToken = escapeHtml(user.token);
+				const isLeader = String(user.role || "").toLowerCase() === "leader";
+
+				const valueMarkup = isLeader
+					? `<code class="text-xs flex-1 min-w-[220px] break-all" style="color: var(--color-accent);">${safeToken}</code>`
+					: `<a href="${safeInstallUrl}" class="text-xs flex-1 min-w-[220px] break-all underline-offset-2 hover:underline" style="color: var(--color-accent);" target="_blank" rel="noopener noreferrer">${safeInstallUrl}</a>`;
+
+				const copyButtonLabel = isLeader ? "Copy Token" : "Copy Link";
+				const copyValue = isLeader ? safeToken : safeInstallUrl;
 				return `
 				<tr class="border-b border-black/5 table-row-hover" style="color: var(--color-text-main);">
               <td class="px-4 py-3">${escapeHtml(user.username)}</td>
@@ -399,16 +408,8 @@ async function renderTeamSuccessPage(teamName, users, serverUrl = "") {
               <td class="px-4 py-3">
                 <div class="space-y-2">
                   <div class="flex items-center gap-2 flex-wrap">
-	                    <a href="${safeInstallUrl}" class="text-xs flex-1 min-w-[220px] break-all underline-offset-2 hover:underline" style="color: var(--color-accent);" target="_blank" rel="noopener noreferrer">${safeInstallUrl}</a>
-	                    <button type="button" class="copy-install-btn px-2 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap" data-link="${safeInstallUrl}" style="background: var(--color-accent-glow); color: var(--color-accent); border: 1px solid var(--color-accent); cursor: pointer;">Copy Link</button>
-                  </div>
-	                  <p class="text-xs italic" style="color: var(--color-text-muted);">Open this link to install Taptic and auto-fill this user's credentials.</p>
-                  <div>
-	                    <p class="text-xs mb-1" style="color: var(--color-text-muted);">Install endpoint:</p>
-	                    <a href="${safeInstallUrl}" class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors" style="background: var(--color-screen-btn-bg); color: var(--color-screen-btn-text); border: 1px solid var(--color-screen-btn-border);" target="_blank" rel="noopener noreferrer">
-                      <i class="ph ph-download"></i>
-	                      Open Install Link
-                    </a>
+	                    ${valueMarkup}
+	                    <button type="button" class="copy-value-btn px-2 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap" data-value="${copyValue}" style="background: var(--color-accent-glow); color: var(--color-accent); border: 1px solid var(--color-accent); cursor: pointer;">${copyButtonLabel}</button>
                   </div>
                 </div>
               </td>
