@@ -507,10 +507,29 @@ async function getTeamDashboardData(teamId) {
 		[teamId],
 	);
 
+	const hourlyResult = await pool.query(
+		`SELECT
+			hour_bucket AS hour,
+			COALESCE(SUM(h.characters_added + h.characters_removed + h.characters_modified), 0)::INT AS total_activity,
+			COALESCE(COUNT(h.id), 0)::INT AS ping_count
+		 FROM generate_series(
+			date_trunc('hour', NOW()) - INTERVAL '11 hours',
+			date_trunc('hour', NOW()),
+			INTERVAL '1 hour'
+		 ) AS hour_bucket
+		 LEFT JOIN pings h
+			on date_trunc('hour', h.received_at) = hour_bucket
+			AND h.team_id = $1
+		 GROUP BY hour_bucket
+		 ORDER BY hour_bucket ASC`,
+		[teamId],
+	);
+
 	return {
 		summary: summaryResult.rows[0],
 		users: usersResult.rows,
 		daily: dailyResult.rows,
+		hourly: hourlyResult.rows,
 	};
 }
 

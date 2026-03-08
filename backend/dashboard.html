@@ -3,201 +3,358 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Team Activity Dashboard</title>
+    <title>Taptic | Team Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="/socket.io/socket.io.js"></script>
-    <link
-      rel="stylesheet"
-      type="text/css"
-      href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css"
-    />
-    <link
-      rel="stylesheet"
-      type="text/css"
-      href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/fill/style.css"
-    />
-    <link rel="stylesheet" href="/static/dashboard-theme.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css" />
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/fill/style.css" />
 
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        glass: {
-                            100: "rgba(255, 255, 255, 0.1)",
-                            200: "rgba(255, 255, 255, 0.05)",
-                        },
-                    },
-                },
-            },
-        };
-    </script>
+    <style>
+        :root {
+            --color-blob-indigo: #818cf8;
+            --color-blob-teal: #5eead4;
+            --color-blob-purple: #c084fc;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #ffffff;
+            color: #111827;
+        }
+
+        .blob {
+            border-radius: 50%;
+            filter: blur(120px);
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .panel {
+            border: 1px solid #e5e7eb;
+            background-color: rgba(255, 255, 255, 0.75);
+            backdrop-filter: blur(10px);
+            border-radius: 1rem;
+        }
+
+        .stat-card,
+        .feature-card {
+            border: 1px solid #e5e7eb;
+            transition: all 0.2s ease;
+            background-color: rgba(255, 255, 255, 0.72);
+            backdrop-filter: blur(10px);
+            border-radius: 1rem;
+        }
+
+        .stat-card:hover,
+        .feature-card:hover {
+            border-color: #111827;
+            transform: translateY(-1px);
+        }
+
+        .hero-pattern {
+            background-image: radial-gradient(#e5e7eb 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        .screen-btn {
+            border: 1px solid #d1d5db;
+            background: #ffffff;
+            color: #111827;
+            border-radius: 0.75rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.5rem 0.75rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            transition: all 0.2s ease;
+        }
+
+        .screen-btn:hover {
+            background: #f9fafb;
+            border-color: #111827;
+        }
+
+        .remind-btn {
+            border: 1px solid #fecaca;
+            background: #fff1f2;
+            color: #9f1239;
+            border-radius: 0.75rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.5rem 0.75rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            transition: all 0.2s ease;
+        }
+
+        .remind-btn:hover {
+            background: #ffe4e6;
+        }
+
+        .remind-btn:disabled {
+            opacity: 0.65;
+            cursor: not-allowed;
+        }
+
+        .role-pill {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 0.45rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.2rem 0.55rem;
+            background: #f9fafb;
+            color: #4b5563;
+            border: 1px solid #e5e7eb;
+        }
+
+        .role-pill-leader {
+            background: #faf5ff;
+            color: #6b21a8;
+            border-color: #e9d5ff;
+        }
+
+        .presence-online {
+            color: #047857;
+        }
+
+        .presence-offline {
+            color: #9ca3af;
+        }
+
+        .presence-icon {
+            font-size: 0.58rem;
+        }
+
+        .table-row-hover:hover {
+            background: rgba(249, 250, 251, 0.65);
+        }
+
+        .alert-danger {
+            border: 1px solid #fecaca;
+            background: #fff1f2;
+            color: #9f1239;
+        }
+
+        .screenshot-request-state {
+            border: 1px solid #e5e7eb;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(8px);
+        }
+
+        .screenshot-request-track {
+            height: 0.375rem;
+            border-radius: 999px;
+            background: #f3f4f6;
+            overflow: hidden;
+        }
+
+        .screenshot-request-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #111827, #4b5563);
+            transition: width 0.1s linear;
+        }
+
+        .screenshot-request-bar.is-failed {
+            background: linear-gradient(90deg, #dc2626, #b91c1c);
+        }
+
+        .screenshot-modal-overlay {
+            background: rgba(17, 24, 39, 0.35);
+            backdrop-filter: blur(4px);
+        }
+
+        .glass-panel-inner {
+            border: 1px solid #e5e7eb;
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(8px);
+        }
+
+        .mock-scrollbar::-webkit-scrollbar {
+            height: 8px;
+            width: 8px;
+        }
+
+        .mock-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .mock-scrollbar::-webkit-scrollbar-thumb {
+            background-color: #d1d5db;
+            border-radius: 20px;
+        }
+    </style>
 </head>
-<body class="theme-page antialiased relative min-h-screen overflow-x-hidden">
-    <div class="fixed top-[-10%] left-[-10%] w-[500px] h-[500px] blob opacity-80 z-0" style="background: var(--color-blob-indigo);"></div>
-    <div class="fixed bottom-[-10%] right-[-10%] w-[600px] h-[600px] blob opacity-80 z-0" style="background: var(--color-blob-teal);"></div>
-    <div class="fixed top-[40%] left-[60%] w-[400px] h-[400px] blob opacity-80 z-0" style="background: var(--color-blob-purple);"></div>
+<body class="selection:bg-indigo-100 relative min-h-screen overflow-x-hidden">
+    <div class="fixed top-[-10%] left-[-10%] w-[500px] h-[500px] blob opacity-80" style="background: var(--color-blob-indigo);"></div>
+    <div class="fixed bottom-[-10%] right-[-10%] w-[600px] h-[600px] blob opacity-80" style="background: var(--color-blob-teal);"></div>
+    <div class="fixed top-[40%] left-[60%] w-[400px] h-[400px] blob opacity-80" style="background: var(--color-blob-purple);"></div>
 
-    <div class="relative z-10 container mx-auto px-4 py-8 max-w-7xl">
-        <header class="glass-panel rounded-2xl p-6 mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div>
-                <h1 class="text-3xl font-bold tracking-tight flex items-center gap-2" style="color: var(--color-text-strong);">
-                    <i class="ph-fill ph-chart-line-up"></i>
-                    Team Dashboard
+    <nav class="fixed top-0 w-full bg-white/70 backdrop-blur-md z-40 border-b border-gray-100">
+        <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 bg-black rounded flex items-center justify-center">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                </div>
+                <div>
+                    <span class="font-bold text-xl tracking-tight">Taptic</span>
+                    <p class="text-[11px] text-gray-500 font-medium -mt-0.5">Team Dashboard</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-4">
+                <span class="text-xs sm:text-sm text-gray-500">Last Sync: <span id="last-sync" class="text-gray-800 font-semibold">...</span></span>
+                <button id="logout-btn" class="text-sm font-medium px-4 py-2 border border-gray-200 rounded-full hover:border-black hover:text-black transition-colors">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="pt-28 pb-14 px-6 hero-pattern">
+        <div class="max-w-7xl mx-auto relative z-10">
+            <div class="mb-8 text-center">
+                <div class="inline-block px-3 py-1 bg-white/80 backdrop-blur-sm border border-gray-100 rounded-full text-xs font-semibold tracking-wide uppercase mb-5 shadow-sm">
+                    Live Team Monitoring
+                </div>
+                <h1 class="text-4xl md:text-5xl font-bold tracking-tight mb-3 leading-tight">
+                    <span id="team-name">...</span> activity command center
                 </h1>
-                <p class="mt-1" style="color: var(--color-text-muted);">
-                    Welcome, <strong style="color: var(--color-accent);" id="leader-name">...</strong>
-                    (Team: <strong style="color: var(--color-accent);" id="team-name">...</strong>)
+                <p class="text-gray-600 text-lg">
+                    Team Leader: <strong id="leader-name" class="text-gray-900">...</strong>
                 </p>
             </div>
-            <div class="flex items-center gap-4 flex-wrap">
-                <span class="text-sm" style="color: var(--color-text-muted);">Last Sync: <span id="last-sync" style="color: var(--color-text-strong);">...</span></span>
-                <button id="logout-btn" class="bg-black/5 hover:bg-black/10 transition-colors border border-black/5 px-5 py-2 rounded-lg text-sm font-medium flex items-center gap-2" style="color: var(--color-text-strong);">
-                    <i class="ph ph-sign-out"></i>
-                    Logout
-                </button>
-            </div>
-        </header>
 
-        <div id="dashboard-error" class="hidden mb-6 rounded-lg px-4 py-3 text-sm alert-danger"></div>
+            <div id="dashboard-error" class="hidden mb-6 rounded-lg px-4 py-3 text-sm alert-danger"></div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-            <div class="glass-panel rounded-2xl p-6 flex flex-col justify-center relative overflow-hidden">
-                <div class="absolute top-0 right-0 p-4 opacity-20">
-                    <i class="ph ph-users-three kpi-icon"></i>
+            <div id="screenshot-request-state" class="hidden mb-6 rounded-lg p-3 screenshot-request-state">
+                <div class="flex items-center justify-between text-xs mb-2">
+                    <span id="screenshot-request-message" class="text-gray-800">Requesting screenshot...</span>
+                    <span id="screenshot-request-timer" class="text-gray-500">0.0s / 10.0s</span>
                 </div>
-                <span class="text-sm font-medium uppercase tracking-wider mb-1 pr-8" style="color: var(--color-text-muted);">Team Members</span>
-                <strong class="text-3xl font-bold" style="color: var(--color-text-strong);" id="stat-members">0</strong>
+                <div class="screenshot-request-track">
+                    <div id="screenshot-request-bar" class="screenshot-request-bar"></div>
+                </div>
             </div>
 
-            <div class="glass-panel rounded-2xl p-6 flex flex-col justify-center relative overflow-hidden">
-                <div class="absolute top-0 right-0 p-4 opacity-20">
-                    <i class="ph ph-heartbeat kpi-icon"></i>
+            <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">
+                <div class="stat-card p-6">
+                    <p class="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">Team Members</p>
+                    <p class="text-3xl font-bold text-gray-900" id="stat-members">0</p>
                 </div>
-                <span class="text-sm font-medium uppercase tracking-wider mb-1 pr-8" style="color: var(--color-text-muted);">Total Pings</span>
-                <strong class="text-3xl font-bold" style="color: var(--color-text-strong);" id="stat-pings">0</strong>
-            </div>
+                <div class="stat-card p-6">
+                    <p class="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">Total Pings</p>
+                    <p class="text-3xl font-bold text-gray-900" id="stat-pings">0</p>
+                </div>
+                <div class="stat-card p-6">
+                    <p class="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">Total Words</p>
+                    <p class="text-3xl font-bold text-gray-900" id="stat-chars">0</p>
+                </div>
+                <div class="stat-card p-6">
+                    <p class="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">Services Used</p>
+                    <p class="text-3xl font-bold text-gray-900" id="stat-services">0</p>
+                </div>
+                <div class="stat-card p-6">
+                    <p class="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">Peak Hour</p>
+                    <p class="text-3xl font-bold text-gray-900" id="stat-peak">0</p>
+                    <p class="text-xs mt-1 text-gray-500" id="stat-peak-date">...</p>
+                </div>
+            </section>
 
-            <div class="glass-panel rounded-2xl p-6 flex flex-col justify-center relative overflow-hidden">
-                <div class="absolute top-0 right-0 p-4 opacity-20">
-                    <i class="ph ph-pencil-simple-line kpi-icon"></i>
+            <section class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                <div class="panel p-8">
+                    <div class="flex items-center justify-between mb-6 pb-4 border-b border-gray-100">
+                        <h2 class="text-xl font-bold text-gray-900">Team Activity</h2>
+                        <span class="text-xs text-green-600 font-bold bg-green-50 px-2 py-1 rounded">Live</span>
+                    </div>
+                    <div id="team-activity-bars" class="space-y-5">
+                        <p class="text-sm text-gray-500 text-center py-8">Waiting for team activity...</p>
+                    </div>
                 </div>
-                <span class="text-sm font-medium uppercase tracking-wider mb-1 pr-12" style="color: var(--color-text-muted);">Total Characters</span>
-                <strong class="text-3xl font-bold" style="color: var(--color-text-strong);" id="stat-chars">0</strong>
-            </div>
 
-            <div class="glass-panel rounded-2xl p-6 flex flex-col justify-center relative overflow-hidden">
-                <div class="absolute top-0 right-0 p-4 opacity-20">
-                    <i class="ph ph-stack kpi-icon"></i>
+                <div class="panel p-8">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-xl font-bold text-gray-900">Contributions Over Last 12 Hours</h2>
+                        <span class="text-xs text-green-600 font-bold bg-green-50 px-2 py-1 rounded">Live</span>
+                    </div>
+                    <div class="relative h-72 w-full">
+                        <canvas id="teamActivityChart"></canvas>
+                    </div>
                 </div>
-                <span class="text-sm font-medium uppercase tracking-wider mb-1 pr-8" style="color: var(--color-text-muted);">Services Used</span>
-                <strong class="text-3xl font-bold" style="color: var(--color-text-strong);" id="stat-services">0</strong>
-            </div>
+            </section>
 
-            <div class="glass-panel rounded-2xl p-6 flex flex-col justify-center relative overflow-hidden">
-                <div class="absolute top-0 right-0 p-4 opacity-20">
-                    <i class="ph ph-trend-up kpi-icon"></i>
+            <section class="panel p-6 md:p-8">
+                <h2 class="text-xl font-bold text-gray-900 mb-6">Detailed User Metrics</h2>
+                <div class="overflow-x-auto mock-scrollbar">
+                    <table class="w-full text-left min-w-[900px]">
+                        <thead>
+                            <tr>
+                                <th class="pb-4 px-2 text-[11px] font-semibold text-gray-400 uppercase tracking-widest border-b border-gray-100">Username</th>
+                                <th class="pb-4 px-2 text-[11px] font-semibold text-gray-400 uppercase tracking-widest border-b border-gray-100">Role</th>
+                                <th class="pb-4 px-2 text-[11px] font-semibold text-gray-400 uppercase tracking-widest border-b border-gray-100 text-right">Pings</th>
+                                <th class="pb-4 px-2 text-[11px] font-semibold text-gray-400 uppercase tracking-widest border-b border-gray-100 text-right">Added</th>
+                                <th class="pb-4 px-2 text-[11px] font-semibold text-gray-400 uppercase tracking-widest border-b border-gray-100 text-right">Removed</th>
+                                <th class="pb-4 px-2 text-[11px] font-semibold text-gray-400 uppercase tracking-widest border-b border-gray-100 text-right">Modified</th>
+                                <th class="pb-4 px-2 text-[11px] font-semibold text-gray-800 uppercase tracking-widest border-b border-gray-100 text-right">Total Words</th>
+                                <th class="pb-4 px-2 text-[11px] font-semibold text-gray-400 uppercase tracking-widest border-b border-gray-100 text-right">Efficiency (WPM)</th>
+                                <th class="pb-4 px-2 text-[11px] font-semibold text-gray-400 uppercase tracking-widest border-b border-gray-100 text-right">Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="user-table-body" class="divide-y divide-gray-50"></tbody>
+                    </table>
                 </div>
-                <span class="text-sm font-medium uppercase tracking-wider mb-1 pr-8" style="color: var(--color-text-muted);">Peak Daily Activity</span>
-                <strong class="text-3xl font-bold" style="color: var(--color-text-strong);" id="stat-peak">0</strong>
-                <span class="text-xs mt-1" style="color: var(--color-kpi-peak);" id="stat-peak-date">...</span>
-            </div>
+                <p class="mt-4 text-[11px] text-gray-400 font-medium">* Efficiency = Total Words / Active Minutes (between first and last ping)</p>
+            </section>
         </div>
-
-        <div id="screenshot-request-state" class="hidden mb-6 rounded-lg p-3 screenshot-request-state">
-            <div class="flex items-center justify-between text-xs mb-2">
-                <span id="screenshot-request-message" style="color: var(--color-text-strong);">Requesting screenshot...</span>
-                <span id="screenshot-request-timer" style="color: var(--color-text-muted);">0.0s / 10.0s</span>
-            </div>
-            <div class="screenshot-request-track">
-                <div id="screenshot-request-bar" class="screenshot-request-bar" style="width: 0%;"></div>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-            <div class="glass-panel rounded-2xl p-6">
-                <h2 class="text-xl font-semibold mb-4" style="color: var(--color-text-strong);">Daily Team Activity (Last 14 Days)</h2>
-                <div class="relative h-72 w-full">
-                    <canvas id="teamActivityChart"></canvas>
-                </div>
-            </div>
-
-            <div class="glass-panel rounded-2xl p-6">
-                <h2 class="text-xl font-semibold mb-4" style="color: var(--color-text-strong);">User Contribution Comparison</h2>
-                <div class="relative h-72 w-full">
-                    <canvas id="userContributionChart"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <div class="glass-panel rounded-2xl p-6 overflow-hidden flex flex-col">
-            <h2 class="text-xl font-semibold mb-4" style="color: var(--color-text-strong);">Detailed User Metrics</h2>
-            <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse">
-                    <thead>
-                        <tr class="border-b border-black/5 text-sm tracking-wider uppercase" style="color: var(--color-text-muted);">
-                            <th class="p-4 font-medium">Username</th>
-                            <th class="p-4 font-medium">Role</th>
-                            <th class="p-4 font-medium text-right">Pings</th>
-                            <th class="p-4 font-medium text-right" style="color: var(--color-kpi-added);">Words Added</th>
-                            <th class="p-4 font-medium text-right" style="color: var(--color-kpi-removed);">Words Removed</th>
-                            <th class="p-4 font-medium text-right" style="color: var(--color-kpi-modified);">Words Modified</th>
-                            <th class="p-4 font-medium text-right" style="color: var(--color-text-strong);">Total Words</th>
-                            <th class="p-4 font-medium text-right" style="color: var(--color-kpi-peak);">Efficiency (WPM)\*</th>
-                            <th class="p-4 font-medium text-right">DETAILS</th>
-                        </tr>
-                    </thead>
-                    <tbody id="user-table-body" class="divide-y divide-black/5"></tbody>
-                </table>
-            </div>
-            <div class="mt-4 flex justify-between items-center text-xs" style="color: var(--color-text-muted);">
-                <span>* Efficiency = Total Words / Active Minutes (between first and last ping)</span>
-            </div>
-        </div>
-    </div>
+    </main>
 
     <div id="screenshot-modal" class="hidden fixed inset-0 z-50 items-center justify-center p-4 screenshot-modal-overlay">
-        <div class="glass-panel w-full max-w-4xl rounded-2xl p-4 md:p-6">
+        <div class="panel w-full max-w-4xl p-4 md:p-6">
             <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold flex items-center gap-2" style="color: var(--color-text-strong);">
+                <h3 class="text-lg font-semibold flex items-center gap-2 text-gray-900">
                     <i class="ph-fill ph-monitor"></i>
                     Live Screenshot
                 </h3>
                 <button id="screenshot-modal-close" class="screen-btn px-3 py-1.5" type="button">Close</button>
             </div>
-            <div class="rounded-xl overflow-hidden border border-black/5 bg-white/50">
+            <div class="rounded-xl overflow-hidden border border-gray-200 bg-white/80">
                 <img id="screenshot-image" class="w-full h-auto max-h-[70vh] object-contain mx-auto" alt="Screenshot preview" />
             </div>
-            <div class="mt-3 text-xs flex flex-col gap-2" style="color: var(--color-text-muted);">
+            <div class="mt-3 text-xs flex flex-col gap-2 text-gray-500">
                 <span id="screenshot-meta">No screenshot loaded yet.</span>
                 <div id="screenshot-page-info" class="flex flex-col gap-1">
-                    <span id="screenshot-page-title" class="font-medium" style="color: var(--color-text-strong);"></span>
-                    <a id="screenshot-page-url" href="#" target="_blank" rel="noopener noreferrer" class="truncate hover:underline" style="color: var(--color-accent);"></a>
+                    <span id="screenshot-page-title" class="font-medium text-gray-900"></span>
+                    <a id="screenshot-page-url" href="#" target="_blank" rel="noopener noreferrer" class="truncate hover:underline text-gray-700"></a>
                 </div>
-                <span class="italic" style="color: var(--color-text-muted); opacity: 0.7;">Screenshots expire in 1 hour</span>
+                <span class="italic text-gray-400">Screenshots expire in 1 hour</span>
             </div>
         </div>
     </div>
 
     <div id="detailed-view-modal" class="hidden fixed inset-0 z-50 items-center justify-center p-4 screenshot-modal-overlay">
-        <div class="glass-panel w-full max-w-5xl rounded-2xl p-4 md:p-6 max-h-[90vh] overflow-y-auto">
+        <div class="panel w-full max-w-5xl p-4 md:p-6 max-h-[90vh] overflow-y-auto">
             <div class="flex items-center justify-between mb-6">
-                <h3 class="text-xl font-semibold flex items-center gap-2" style="color: var(--color-text-strong);">
+                <h3 class="text-xl font-semibold flex items-center gap-2 text-gray-900">
                     <i class="ph-fill ph-user-focus"></i>
                     <span id="detailed-view-username">User Details</span>
                 </h3>
                 <button id="detailed-view-close" class="screen-btn px-3 py-1.5" type="button">Close</button>
             </div>
-            
+
             <div class="space-y-6">
-                <!-- User Info Section -->
                 <div class="glass-panel-inner rounded-xl p-4">
                     <div class="flex items-start gap-4">
-                        <div id="detailed-view-avatar" class="w-16 h-16 rounded-full bg-gradient-to-br flex items-center justify-center text-xl font-bold"></div>
+                        <div id="detailed-view-avatar" class="w-16 h-16 rounded-full bg-gradient-to-br flex items-center justify-center text-xl font-bold text-white"></div>
                         <div class="flex-1">
                             <div class="flex items-center gap-3 mb-2">
-                                <h4 class="text-lg font-semibold" style="color: var(--color-text-strong);" id="detailed-view-user-name">User</h4>
+                                <h4 class="text-lg font-semibold text-gray-900" id="detailed-view-user-name">User</h4>
                                 <span id="detailed-view-status" class="inline-flex items-center gap-1 text-sm presence-online">
                                     <i class="ph-fill ph-circle presence-icon presence-online"></i>
                                     Online
@@ -205,27 +362,26 @@
                             </div>
                             <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                                 <div>
-                                    <span class="block" style="color: var(--color-text-muted);">Role</span>
-                                    <span id="detailed-view-role" class="font-medium" style="color: var(--color-text-strong);">Member</span>
+                                    <span class="block text-gray-500">Role</span>
+                                    <span id="detailed-view-role" class="font-medium text-gray-900">Member</span>
                                 </div>
                                 <div>
-                                    <span class="block" style="color: var(--color-text-muted);">Total Activity</span>
-                                    <span id="detailed-view-activity" class="font-medium" style="color: var(--color-text-strong);">0 words</span>
+                                    <span class="block text-gray-500">Total Activity</span>
+                                    <span id="detailed-view-activity" class="font-medium text-gray-900">0 words</span>
                                 </div>
                                 <div>
-                                    <span class="block" style="color: var(--color-text-muted);">Pings</span>
-                                    <span id="detailed-view-pings" class="font-medium" style="color: var(--color-text-strong);">0</span>
+                                    <span class="block text-gray-500">Pings</span>
+                                    <span id="detailed-view-pings" class="font-medium text-gray-900">0</span>
                                 </div>
                                 <div>
-                                    <span class="block" style="color: var(--color-text-muted);">Efficiency (WPM)</span>
-                                    <span id="detailed-view-efficiency" class="font-medium" style="color: var(--color-text-strong);">0 wpm</span>
+                                    <span class="block text-gray-500">Efficiency (WPM)</span>
+                                    <span id="detailed-view-efficiency" class="font-medium text-gray-900">0 wpm</span>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    
-                    <!-- Action Buttons -->
-                    <div class="flex items-center gap-3 mt-4 pt-4 border-t border-black/5">
+
+                    <div class="flex items-center gap-3 mt-4 pt-4 border-t border-gray-200">
                         <button type="button" class="screen-btn" id="detailed-view-screenshot-btn" data-action="see-screen">
                             <i class="ph ph-monitor"></i> See Screen
                         </button>
@@ -237,15 +393,14 @@
                     </div>
                 </div>
 
-                <!-- Browser Tabs Section -->
                 <div class="glass-panel-inner rounded-xl p-4">
-                    <h4 class="text-base font-semibold mb-4 flex items-center gap-2" style="color: var(--color-text-strong);">
+                    <h4 class="text-base font-semibold mb-4 flex items-center gap-2 text-gray-900">
                         <i class="ph-fill ph-browser"></i>
                         Browser Tabs
-                        <span class="text-xs px-2 py-0.5 rounded-full" style="background: var(--color-accent-subtle); color: var(--color-accent);" id="tab-count">0</span>
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700" id="tab-count">0</span>
                     </h4>
                     <div id="detailed-view-tabs" class="space-y-2">
-                        <p class="text-sm text-center py-8" style="color: var(--color-text-muted);">Loading tabs...</p>
+                        <p class="text-sm text-center py-8 text-gray-500">Loading tabs...</p>
                     </div>
                 </div>
             </div>
@@ -258,9 +413,9 @@
         const FALLBACK_REFRESH_INTERVAL_MS = 30000;
         const SCREENSHOT_REQUEST_TIMEOUT_MS = 10000;
         const SCREENSHOT_PROGRESS_TICK_MS = 100;
+        const DETAILED_VIEW_TABS_POLL_MS = 3000;
 
         let teamActivityChartInstance = null;
-        let userContributionChartInstance = null;
         let isDashboardLoading = false;
         let queuedRefreshTimeout = null;
         let refreshRequestedDuringLoad = false;
@@ -274,8 +429,7 @@
         let detailedViewUsername = null;
         let detailedViewUserData = null;
         let detailedViewTabsInterval = null;
-        const DETAILED_VIEW_TABS_POLL_MS = 3000;
-        
+
         const avatarColors = [
             ['#8b5cf6', '#6366f1'],
             ['#a855f7', '#7c3aed'],
@@ -286,49 +440,14 @@
             ['#eab308', '#ca8a04'],
             ['#84cc16', '#65a30d'],
             ['#10b981', '#059669'],
-            ['#14b8a6', '#0d9488'],
+            ['#14b8a6', '#0d9488']
         ];
-        
-        const getUserAvatarColors = (username) => {
-            const hash = String(username || '').split('').reduce((acc, char) => {
-                return char.charCodeAt(0) + ((acc << 5) - acc);
-            }, 0);
-            const index = Math.abs(hash) % avatarColors.length;
-            return avatarColors[index];
-        };
 
         const socket = io({ transports: ["websocket", "polling"] });
 
-        const getThemeVar = (name, fallback = "") => {
-            const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-            return value || fallback;
-        };
-
-        const getChartPalette = () => {
-            return {
-                grid: getThemeVar("--color-chart-grid", "rgba(255, 255, 255, 0.06)"),
-                line: getThemeVar("--color-chart-line", "#2dd4bf"),
-                linePoint: getThemeVar("--color-chart-line-point", "#14b8a6"),
-                lineFillStart: getThemeVar("--color-chart-line-fill-start", "rgba(45, 212, 191, 0.28)"),
-                lineFillEnd: getThemeVar("--color-chart-line-fill-end", "rgba(45, 212, 191, 0.04)"),
-                tooltipBg: getThemeVar("--color-chart-tooltip-bg", "rgba(2, 6, 23, 0.95)"),
-                tooltipBorder: getThemeVar("--color-chart-tooltip-border", "rgba(148, 163, 184, 0.2)"),
-                tooltipBody: getThemeVar("--color-chart-tooltip-body", "#e2e8f0"),
-                barColors: [
-                    getThemeVar("--color-chart-bar-1", "rgba(15, 118, 110, 0.75)"),
-                    getThemeVar("--color-chart-bar-2", "rgba(17, 94, 89, 0.75)"),
-                    getThemeVar("--color-chart-bar-3", "rgba(19, 78, 74, 0.75)"),
-                    getThemeVar("--color-chart-bar-4", "rgba(21, 128, 61, 0.75)"),
-                    getThemeVar("--color-chart-bar-5", "rgba(4, 120, 87, 0.75)"),
-                ],
-                barBorders: [
-                    getThemeVar("--color-chart-bar-border-1", "rgba(15, 118, 110, 1)"),
-                    getThemeVar("--color-chart-bar-border-2", "rgba(17, 94, 89, 1)"),
-                    getThemeVar("--color-chart-bar-border-3", "rgba(19, 78, 74, 1)"),
-                    getThemeVar("--color-chart-bar-border-4", "rgba(21, 128, 61, 1)"),
-                    getThemeVar("--color-chart-bar-border-5", "rgba(4, 120, 87, 1)"),
-                ],
-            };
+        const getUserAvatarColors = (username) => {
+            const hash = String(username || '').split('').reduce((acc, char) => char.charCodeAt(0) + ((acc << 5) - acc), 0);
+            return avatarColors[Math.abs(hash) % avatarColors.length];
         };
 
         const formatNumber = (num) => new Intl.NumberFormat("en-US").format(Number(num || 0));
@@ -342,7 +461,7 @@
                 month: "short",
                 day: "numeric",
                 hour: "2-digit",
-                minute: "2-digit",
+                minute: "2-digit"
             }).format(date);
         };
 
@@ -351,13 +470,23 @@
             if (Number.isNaN(date.getTime())) {
                 return "Unknown time";
             }
-
             return new Intl.DateTimeFormat("en-US", {
                 month: "short",
                 day: "numeric",
                 hour: "2-digit",
                 minute: "2-digit",
-                second: "2-digit",
+                second: "2-digit"
+            }).format(date);
+        };
+
+        const formatHourLabel = (hourValue) => {
+            const date = new Date(hourValue);
+            if (Number.isNaN(date.getTime())) {
+                return "--";
+            }
+            return new Intl.DateTimeFormat("en-US", {
+                hour: "numeric",
+                minute: "2-digit"
             }).format(date);
         };
 
@@ -377,21 +506,14 @@
 
         const normalizeTeam = (teamName) => String(teamName || "").trim().toLowerCase();
         const normalizeUsername = (username) => String(username || "").trim().toLowerCase();
-
         const isSameTeam = (teamNameA, teamNameB) => normalizeTeam(teamNameA) === normalizeTeam(teamNameB);
 
         const isUserOnline = (user) => {
             const username = normalizeUsername(user.username);
-            if (!username) {
-                return false;
-            }
-
-            return onlineUsernames.has(username);
+            return username ? onlineUsernames.has(username) : false;
         };
 
-        const isLeaderUser = (user) => {
-            return normalizeUsername(user.username) === normalizeUsername(leaderCredentials.username);
-        };
+        const isLeaderUser = (user) => normalizeUsername(user.username) === normalizeUsername(leaderCredentials.username);
 
         const getWordsPerMinute = (user) => {
             const totalWords = Number(user.total_activity || 0) / 5;
@@ -418,11 +540,9 @@
             if (screenshotRequestState && screenshotRequestState.timeoutId) {
                 window.clearTimeout(screenshotRequestState.timeoutId);
             }
-
             if (screenshotRequestState && screenshotRequestState.intervalId) {
                 window.clearInterval(screenshotRequestState.intervalId);
             }
-
             screenshotRequestState = null;
         };
 
@@ -435,7 +555,7 @@
             barEl.style.width = "0%";
             barEl.classList.remove("is-failed");
             messageEl.textContent = "Requesting screenshot...";
-            messageEl.style.color = "var(--color-text-strong)";
+            messageEl.style.color = "#111827";
             timerEl.textContent = "0.0s / 10.0s";
             stateEl.classList.add("hidden");
         };
@@ -451,7 +571,7 @@
             barEl.style.width = "100%";
             barEl.classList.add("is-failed");
             messageEl.textContent = message;
-            messageEl.style.color = "var(--color-danger-text)";
+            messageEl.style.color = "#b91c1c";
             timerEl.textContent = "failed";
             stateEl.classList.remove("hidden");
 
@@ -469,7 +589,7 @@
             const startedAt = Date.now();
 
             messageEl.textContent = `Requesting screenshot from ${username}...`;
-            messageEl.style.color = "var(--color-text-strong)";
+            messageEl.style.color = "#111827";
             timerEl.textContent = "0.0s / 10.0s";
             barEl.classList.remove("is-failed");
             barEl.style.width = "0%";
@@ -486,11 +606,7 @@
                 failScreenshotRequest(`Screenshot request failed: ${username} did not respond within 10 seconds.`);
             }, SCREENSHOT_REQUEST_TIMEOUT_MS);
 
-            screenshotRequestState = {
-                username: normalizedUsername,
-                intervalId,
-                timeoutId,
-            };
+            screenshotRequestState = { username: normalizedUsername, intervalId, timeoutId };
         };
 
         const completeScreenshotRequestIfMatching = (username) => {
@@ -508,39 +624,76 @@
             clearDashboardError();
         };
 
+        const renderTeamActivityView = (users) => {
+            const container = document.getElementById("team-activity-bars");
+
+            if (!Array.isArray(users) || users.length === 0) {
+                container.innerHTML = '<p class="text-sm text-gray-500 text-center py-8">No team activity yet.</p>';
+                return;
+            }
+
+            const maxActivity = users.reduce((max, user) => Math.max(max, Number(user.total_activity || 0)), 0);
+            const totalActivity = users.reduce((sum, user) => sum + Number(user.total_activity || 0), 0);
+
+            container.innerHTML = users
+                .slice(0, 6)
+                .map((user, index) => {
+                    const activity = Number(user.total_activity || 0);
+                    const totalWords = Math.floor(activity / 5);
+                    const percent = totalActivity > 0 ? Math.round((activity / totalActivity) * 100) : 0;
+                    const widthByMax = maxActivity > 0 ? Math.max(4, Math.round((activity / maxActivity) * 100)) : 0;
+                    const colors = ["bg-black", "bg-gray-700", "bg-gray-500", "bg-gray-400", "bg-gray-300", "bg-gray-200"];
+                    const barColor = colors[index % colors.length];
+                    const roleLabel = toRoleLabel(user.role);
+
+                    return `
+                        <div>
+                            <div class="flex justify-between text-sm mb-2 gap-4">
+                                <span class="font-medium text-gray-600 truncate">${escapeHtml(user.username)} ${roleLabel === "Leader" ? "(Team Leader)" : ""}</span>
+                                <span class="font-bold text-gray-900 whitespace-nowrap">${formatNumber(totalWords)} words (${percent}%)</span>
+                            </div>
+                            <div class="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div class="h-full ${barColor}" style="width:${widthByMax}%;"></div>
+                            </div>
+                        </div>
+                    `;
+                })
+                .join("");
+        };
+
         const renderUserTable = (users) => {
             const tbody = document.getElementById("user-table-body");
             let tableHtml = "";
 
             if (!users.length) {
-                tableHtml = '<tr><td colspan="9" class="p-4 text-center" style="color: var(--color-text-muted);">No user data available</td></tr>';
-            } else {
-                users.forEach((user) => {
-                    const wpm = String(getWordsPerMinute(user));
-                    const roleLabel = toRoleLabel(user.role);
-                    const roleClass = roleLabel === "Leader" ? "role-pill role-pill-leader" : "role-pill";
-                    const online = isUserOnline(user);
-                    const isSelf = isLeaderUser(user);
-                    const statusLabel = isSelf ? "You" : (online ? "Online" : "Offline");
-                    const presenceClass = isSelf || online ? "presence-online" : "presence-offline";
-                    const [avatarStart, avatarEnd] = getUserAvatarColors(user.username);
-                    const totalWords = Math.floor(Number(user.total_activity || 0) / 5);
+                tbody.innerHTML = '<tr><td colspan="9" class="p-4 text-center text-gray-500">No user data available</td></tr>';
+                return;
+            }
 
-                    const actionHtml = online
-                        ? `<button type="button" class="screen-btn" data-action="detailed-view" data-username="${escapeHtml(user.username)}">
-                            <i class="ph ph-user-focus"></i> Open Detailed View
-                           </button>`
-                        : `<span class="text-xs" style="color: var(--color-text-muted);">Unavailable</span>`;
+            users.forEach((user) => {
+                const wpm = String(getWordsPerMinute(user));
+                const roleLabel = toRoleLabel(user.role);
+                const roleClass = roleLabel === "Leader" ? "role-pill role-pill-leader" : "role-pill";
+                const online = isUserOnline(user);
+                const isSelf = isLeaderUser(user);
+                const statusLabel = isSelf ? "You" : (online ? "Online" : "Offline");
+                const presenceClass = isSelf || online ? "presence-online" : "presence-offline";
+                const [avatarStart, avatarEnd] = getUserAvatarColors(user.username);
+                const totalWords = Math.floor(Number(user.total_activity || 0) / 5);
 
-                    tableHtml += `
-                    <tr class="table-row-hover transition-colors group">
-                        <td class="p-4 font-medium" style="color: var(--color-text-strong);">
+                const actionHtml = online
+                    ? `<button type="button" class="screen-btn" data-action="detailed-view" data-username="${escapeHtml(user.username)}"><i class="ph ph-user-focus"></i> Open Detailed View</button>`
+                    : `<span class="text-xs text-gray-400">Unavailable</span>`;
+
+                tableHtml += `
+                    <tr class="table-row-hover transition-colors">
+                        <td class="py-5 px-2">
                             <div class="flex items-center gap-3">
-                                <div class="w-8 h-8 rounded-full bg-gradient-to-br flex items-center justify-center text-xs font-bold" style="background: linear-gradient(135deg, ${avatarStart}, ${avatarEnd});">
+                                <div class="w-8 h-8 rounded-full text-white flex items-center justify-center text-[12px] font-bold" style="background: linear-gradient(135deg, ${avatarStart}, ${avatarEnd});">
                                     ${escapeHtml(String(user.username || "").slice(0, 2).toUpperCase() || "??")}
                                 </div>
                                 <div class="flex items-center gap-2">
-                                    <span>${escapeHtml(user.username)}</span>
+                                    <span class="font-semibold text-gray-900 text-[14px]">${escapeHtml(user.username)}</span>
                                     <span class="inline-flex items-center gap-1 text-xs ${presenceClass}">
                                         <i class="ph-fill ph-circle presence-icon ${presenceClass}"></i>
                                         ${statusLabel}
@@ -548,180 +701,144 @@
                                 </div>
                             </div>
                         </td>
-                        <td class="p-4" style="color: var(--color-text-soft);">
-                            <span class="px-2 py-1 text-xs font-medium ${roleClass}">
-                                ${escapeHtml(roleLabel)}
-                            </span>
-                        </td>
-                        <td class="p-4 text-right font-mono" style="color: var(--color-text-soft);">${formatNumber(user.ping_count)}</td>
-                        <td class="p-4 text-right font-mono" style="color: var(--color-kpi-added);">${formatNumber(Math.floor(user.characters_added / 5))}</td>
-                        <td class="p-4 text-right font-mono" style="color: var(--color-kpi-removed);">${formatNumber(Math.floor(user.characters_removed / 5))}</td>
-                        <td class="p-4 text-right font-mono" style="color: var(--color-kpi-modified);">${formatNumber(Math.floor(user.characters_modified / 5))}</td>
-                        <td class="p-4 text-right font-bold font-mono" style="color: var(--color-text-strong);">${formatNumber(totalWords)}</td>
-                        <td class="p-4 text-right font-mono" style="color: var(--color-kpi-peak);">${wpm} wpm</td>
-                        <td class="p-4 text-right">${actionHtml}</td>
+                        <td class="py-5 px-2"><span class="${roleClass}">${escapeHtml(roleLabel)}</span></td>
+                        <td class="py-5 px-2 text-right text-gray-600 font-medium">${formatNumber(user.ping_count)}</td>
+                        <td class="py-5 px-2 text-right text-emerald-700 font-medium">${formatNumber(Math.floor(user.characters_added / 5))}</td>
+                        <td class="py-5 px-2 text-right text-rose-700 font-medium">${formatNumber(Math.floor(user.characters_removed / 5))}</td>
+                        <td class="py-5 px-2 text-right text-indigo-700 font-medium">${formatNumber(Math.floor(user.characters_modified / 5))}</td>
+                        <td class="py-5 px-2 text-right font-bold text-gray-900 text-[15px]">${formatNumber(totalWords)}</td>
+                        <td class="py-5 px-2 text-right text-gray-500 font-medium">${wpm} wpm</td>
+                        <td class="py-5 px-2 text-right">${actionHtml}</td>
                     </tr>`;
-                });
-            }
+            });
 
             tbody.innerHTML = tableHtml;
         };
 
-        const buildChartLabels = (daily) => {
-            return daily.map((row) => {
-                const date = new Date(row.day + "T00:00:00");
-                return Number.isNaN(date.getTime()) ? row.day : `${date.getMonth() + 1}/${date.getDate()}`;
+        const getLast12HourTicks = () => {
+            const now = new Date();
+            now.setMinutes(0, 0, 0);
+
+            const ticks = [];
+            for (let offset = 11; offset >= 0; offset -= 1) {
+                const tick = new Date(now);
+                tick.setHours(now.getHours() - offset);
+                ticks.push(tick);
+            }
+
+            return ticks;
+        };
+
+        const normalizeHourlySeries = (hourly) => {
+            const ticks = getLast12HourTicks();
+            const valueByHour = new Map();
+
+            (Array.isArray(hourly) ? hourly : []).forEach((row) => {
+                const date = new Date(row.hour);
+                if (Number.isNaN(date.getTime())) {
+                    return;
+                }
+
+                date.setMinutes(0, 0, 0);
+                valueByHour.set(date.getTime(), Number(row.total_activity || 0));
+            });
+
+            return ticks.map((tick) => {
+                return {
+                    hour: tick.toISOString(),
+                    total_activity: valueByHour.get(tick.getTime()) || 0,
+                };
             });
         };
 
-        const buildDailyData = (daily) => daily.map((row) => Number(row.total_activity || 0));
-        const buildUserData = (users) => users.map((row) => Number(row.total_activity || 0));
+        const buildHourlyLabels = (hourlySeries) => hourlySeries.map((row) => formatHourLabel(row.hour));
+        const buildHourlyData = (hourlySeries) => hourlySeries.map((row) => Number(row.total_activity || 0) / 5);
 
-        const initializeChartsIfNeeded = (daily, users) => {
-            const palette = getChartPalette();
+        const initializeTeamChartIfNeeded = (hourly) => {
+            Chart.defaults.color = "rgba(55, 65, 81, 0.8)";
+            Chart.defaults.font.family = "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
-            Chart.defaults.color = "rgba(255, 255, 255, 0.6)";
-            Chart.defaults.font.family = "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
-
-            const gridOptions = {
-                color: palette.grid,
-                drawBorder: false,
-            };
-
-            if (!teamActivityChartInstance) {
-                const dailyCtx = document.getElementById("teamActivityChart").getContext("2d");
-                const gradientLine = dailyCtx.createLinearGradient(0, 0, 0, 400);
-                gradientLine.addColorStop(0, palette.lineFillStart);
-                gradientLine.addColorStop(1, palette.lineFillEnd);
-
-                teamActivityChartInstance = new Chart(dailyCtx, {
-                    type: "line",
-                    data: {
-                        labels: buildChartLabels(daily),
-                        datasets: [{
-                            label: "Total Characters",
-                            data: buildDailyData(daily),
-                            borderColor: palette.line,
-                            backgroundColor: gradientLine,
-                            borderWidth: 2,
-                            pointBackgroundColor: palette.linePoint,
-                            pointBorderColor: palette.line,
-                            pointBorderWidth: 2,
-                            pointRadius: 4,
-                            pointHoverRadius: 6,
-                            tension: 0.4,
-                            fill: true,
-                        }],
-                    },
-                    options: {
-                        animation: {
-                            duration: 900,
-                            easing: "easeOutQuart",
-                        },
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: { display: false },
-                            tooltip: {
-                                backgroundColor: palette.tooltipBg,
-                                titleColor: "#fff",
-                                bodyColor: palette.tooltipBody,
-                                borderColor: palette.tooltipBorder,
-                                borderWidth: 1,
-                                padding: 10,
-                                displayColors: false,
-                                callbacks: {
-                                    label(context) {
-                                        return "Activity: " + formatNumber(context.raw);
-                                    },
-                                },
-                            },
-                        },
-                        scales: {
-                            y: { grid: gridOptions, border: { display: false } },
-                            x: { grid: gridOptions, border: { display: false } },
-                        },
-                    },
-                });
+            if (teamActivityChartInstance) {
+                return;
             }
 
-            if (!userContributionChartInstance) {
-                const userCtx = document.getElementById("userContributionChart").getContext("2d");
+            const chartCtx = document.getElementById("teamActivityChart").getContext("2d");
+            const gradientLine = chartCtx.createLinearGradient(0, 0, 0, 380);
+            gradientLine.addColorStop(0, "rgba(17, 24, 39, 0.22)");
+            gradientLine.addColorStop(1, "rgba(17, 24, 39, 0.03)");
 
-                userContributionChartInstance = new Chart(userCtx, {
-                    type: "bar",
-                    data: {
-                        labels: users.map((user) => user.username),
-                        datasets: [{
-                            label: "Total Activity",
-                            data: buildUserData(users),
-                            backgroundColor: users.map((_, index) => palette.barColors[index % palette.barColors.length]),
-                            borderColor: users.map((_, index) => palette.barBorders[index % palette.barBorders.length]),
+            teamActivityChartInstance = new Chart(chartCtx, {
+                type: "line",
+                data: {
+                    labels: buildHourlyLabels(hourly),
+                    datasets: [{
+                        label: "Words Changed",
+                        data: buildHourlyData(hourly),
+                        borderColor: "#111827",
+                        backgroundColor: gradientLine,
+                        borderWidth: 2,
+                        pointBackgroundColor: "#111827",
+                        pointBorderColor: "#111827",
+                        pointBorderWidth: 1.5,
+                        pointRadius: 3.5,
+                        pointHoverRadius: 5,
+                        tension: 0.35,
+                        fill: true
+                    }]
+                },
+                options: {
+                    animation: {
+                        duration: 900,
+                        easing: "easeOutQuart"
+                    },
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: "rgba(17, 24, 39, 0.95)",
+                            titleColor: "#fff",
+                            bodyColor: "#e5e7eb",
+                            borderColor: "rgba(255,255,255,0.15)",
                             borderWidth: 1,
-                            borderRadius: 6,
-                            barPercentage: 0.6,
-                        }],
+                            padding: 10,
+                            displayColors: false,
+                            callbacks: {
+                                label(context) {
+                                    const words = Number(context.raw || 0);
+                                    const displayWords = Number.isInteger(words) ? String(words) : words.toFixed(1);
+                                    return `${displayWords} words`;
+                                }
+                            }
+                        }
                     },
-                    options: {
-                        animation: {
-                            duration: 900,
-                            easing: "easeOutQuart",
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: "rgba(229, 231, 235, 0.8)", drawBorder: false },
+                            border: { display: false }
                         },
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: { display: false },
-                            tooltip: {
-                                backgroundColor: palette.tooltipBg,
-                                titleColor: "#fff",
-                                bodyColor: palette.tooltipBody,
-                                borderColor: palette.tooltipBorder,
-                                borderWidth: 1,
-                                padding: 10,
-                                callbacks: {
-                                    label(context) {
-                                        return formatNumber(context.raw) + " characters";
-                                    },
-                                },
-                            },
-                        },
-                        scales: {
-                            y: { grid: gridOptions, border: { display: false } },
-                            x: { grid: gridOptions, border: { display: false } },
-                        },
-                    },
-                });
-            }
+                        x: {
+                            grid: { color: "rgba(229, 231, 235, 0.6)", drawBorder: false },
+                            border: { display: false }
+                        }
+                    }
+                }
+            });
         };
 
-        const updateCharts = (daily, users) => {
-            initializeChartsIfNeeded(daily, users);
-
-            const palette = getChartPalette();
-            const dailyLabels = buildChartLabels(daily);
-            const dailyValues = buildDailyData(daily);
-            const userLabels = users.map((row) => row.username);
-            const userValues = buildUserData(users);
-
-            teamActivityChartInstance.data.labels = dailyLabels;
-            teamActivityChartInstance.data.datasets[0].data = dailyValues;
-            teamActivityChartInstance.data.datasets[0].borderColor = palette.line;
-            teamActivityChartInstance.data.datasets[0].pointBorderColor = palette.line;
-            teamActivityChartInstance.data.datasets[0].pointBackgroundColor = palette.linePoint;
+        const updateTeamChart = (hourly) => {
+            const hourlySeries = normalizeHourlySeries(hourly);
+            initializeTeamChartIfNeeded(hourlySeries);
+            teamActivityChartInstance.data.labels = buildHourlyLabels(hourlySeries);
+            teamActivityChartInstance.data.datasets[0].data = buildHourlyData(hourlySeries);
             teamActivityChartInstance.update();
-
-            userContributionChartInstance.data.labels = userLabels;
-            userContributionChartInstance.data.datasets[0].data = userValues;
-            userContributionChartInstance.data.datasets[0].backgroundColor = userValues.map((_, index) => palette.barColors[index % palette.barColors.length]);
-            userContributionChartInstance.data.datasets[0].borderColor = userValues.map((_, index) => palette.barBorders[index % palette.barBorders.length]);
-            userContributionChartInstance.update();
         };
 
         const openScreenshotModal = (payload) => {
             const screenshotModal = document.getElementById("screenshot-modal");
             const screenshotImage = document.getElementById("screenshot-image");
             const screenshotMeta = document.getElementById("screenshot-meta");
-            const screenshotLink = document.getElementById("screenshot-link");
 
             const imageUrl = String(payload.url || "").trim();
             if (!imageUrl) {
@@ -765,17 +882,14 @@
             if (!payload || typeof payload !== "object") {
                 return;
             }
-
             if (String(payload.type || "").toLowerCase() !== "screenshot") {
                 return;
             }
-
             if (!isSameTeam(payload.team, currentTeamName)) {
                 return;
             }
 
             completeScreenshotRequestIfMatching(payload.username);
-
             openScreenshotModal(payload);
         };
 
@@ -784,7 +898,6 @@
             if (!username) {
                 return;
             }
-
             if (!currentTeamName) {
                 showDashboardError("Cannot request screenshot because team context is missing.");
                 return;
@@ -797,170 +910,105 @@
                 leaderUsername: leaderCredentials.username,
                 leaderSecret: leaderCredentials.secret,
                 team: currentTeamName,
-                targetUsername: username,
+                targetUsername: username
             });
         };
-        
+
+        const updateRemindButtonState = (username, state) => {
+            const normalized = String(username || "").trim();
+            const buttons = document.querySelectorAll(`button[data-action="remind"][data-username="${normalized}"]`);
+            buttons.forEach((button) => {
+                const icon = button.querySelector(".remind-icon");
+                const spinner = button.querySelector(".remind-spinner");
+
+                if (state === "loading") {
+                    if (icon) icon.classList.add("hidden");
+                    if (spinner) spinner.classList.remove("hidden");
+                    button.disabled = true;
+                } else {
+                    if (icon) icon.classList.remove("hidden");
+                    if (spinner) spinner.classList.add("hidden");
+                    button.disabled = false;
+                }
+            });
+        };
+
         const requestUserReminder = (targetUsername) => {
             const username = String(targetUsername || "").trim();
             if (!username) {
                 return;
             }
-
             if (!currentTeamName) {
                 showDashboardError("Cannot send reminder because team context is missing.");
                 return;
             }
-            
+
             const normalizedUsername = normalizeUsername(username);
             remindRequestStates.set(normalizedUsername, { pending: true, timestamp: Date.now() });
-            updateRemindButtonState(username, 'loading');
+            updateRemindButtonState(username, "loading");
             clearDashboardError();
 
             socket.emit("remind_client", {
                 leaderUsername: leaderCredentials.username,
                 leaderSecret: leaderCredentials.secret,
                 team: currentTeamName,
-                targetUsername: username,
+                targetUsername: username
             });
-        };
-        
-        const updateRemindButtonState = (username, state) => {
-            const buttons = document.querySelectorAll(`button[data-action="remind"][data-username="${username}"]`);
-            buttons.forEach(button => {
-                const icon = button.querySelector('.remind-icon');
-                const spinner = button.querySelector('.remind-spinner');
-                
-                if (state === 'loading') {
-                    icon.classList.add('hidden');
-                    spinner.classList.remove('hidden');
-                    button.disabled = true;
-                } else {
-                    icon.classList.remove('hidden');
-                    spinner.classList.add('hidden');
-                    button.disabled = false;
-                }
-            });
-        };
-
-        const openDetailedView = (targetUsername) => {
-            const username = String(targetUsername || "").trim();
-            if (!username) return;
-            
-            const userData = latestUsers.find(u => normalizeUsername(u.username) === normalizeUsername(username));
-            if (!userData) return;
-            
-            detailedViewUsername = username;
-            detailedViewUserData = userData;
-            
-            const modal = document.getElementById("detailed-view-modal");
-            const [avatarStart, avatarEnd] = getUserAvatarColors(username);
-            
-            // Populate user info
-            document.getElementById("detailed-view-username").textContent = username;
-            document.getElementById("detailed-view-user-name").textContent = username;
-            document.getElementById("detailed-view-avatar").style.background = `linear-gradient(135deg, ${avatarStart}, ${avatarEnd})`;
-            document.getElementById("detailed-view-avatar").textContent = String(username).slice(0, 2).toUpperCase() || "??";
-            
-            const online = isUserOnline(userData);
-            const isSelf = isLeaderUser(userData);
-            const statusEl = document.getElementById("detailed-view-status");
-            statusEl.className = (online || isSelf)
-                ? "inline-flex items-center gap-1 text-sm presence-online"
-                : "inline-flex items-center gap-1 text-sm presence-offline";
-            statusEl.innerHTML = isSelf
-                ? '<i class="ph-fill ph-circle presence-icon presence-online"></i> You'
-                : (online
-                    ? '<i class="ph-fill ph-circle presence-icon presence-online"></i> Online'
-                    : '<i class="ph-fill ph-circle presence-icon presence-offline"></i> Offline');
-            
-            document.getElementById("detailed-view-role").textContent = toRoleLabel(userData.role);
-            const totalWords = Math.floor(Number(userData.total_activity || 0) / 5);
-            document.getElementById("detailed-view-activity").textContent = `${formatNumber(totalWords)} words`;
-            document.getElementById("detailed-view-pings").textContent = formatNumber(userData.ping_count);
-            
-            const wpm = String(getWordsPerMinute(userData));
-            document.getElementById("detailed-view-efficiency").textContent = `${wpm} wpm`;
-            
-            // Show modal
-            modal.classList.remove("hidden");
-            modal.classList.add("flex");
-            
-            // Start polling for tabs
-            requestUserTabs(username);
-            startTabsPolling();
-        };
-
-        const closeDetailedView = () => {
-            const modal = document.getElementById("detailed-view-modal");
-            modal.classList.add("hidden");
-            modal.classList.remove("flex");
-            
-            detailedViewUsername = null;
-            detailedViewUserData = null;
-            stopTabsPolling();
-            
-            // Clear tabs display
-            document.getElementById("detailed-view-tabs").innerHTML = '<p class="text-sm text-center py-8" style="color: var(--color-text-muted);">Loading tabs...</p>';
         };
 
         const requestUserTabs = (targetUsername) => {
             const username = String(targetUsername || "").trim();
-            if (!username) return;
-            
-            if (!currentTeamName) return;
-            
+            if (!username || !currentTeamName) {
+                return;
+            }
+
             socket.emit("getUserTabs", {
                 leaderUsername: leaderCredentials.username,
                 leaderSecret: leaderCredentials.secret,
                 team: currentTeamName,
-                targetUsername: username,
+                targetUsername: username
             });
         };
 
         const renderUserTabs = (tabs) => {
             const tabsContainer = document.getElementById("detailed-view-tabs");
             const tabCount = document.getElementById("tab-count");
-            
+
             if (!Array.isArray(tabs) || tabs.length === 0) {
-                tabsContainer.innerHTML = '<p class="text-sm text-center py-8" style="color: var(--color-text-muted);">No tabs found</p>';
-                tabCount.textContent = '0';
+                tabsContainer.innerHTML = '<p class="text-sm text-center py-8 text-gray-500">No tabs found</p>';
+                tabCount.textContent = "0";
                 return;
             }
-            
+
             tabCount.textContent = String(tabs.length);
-            
-            let html = '';
-            tabs.forEach(tab => {
-                const isActive = tab.tabState === 'active';
-                const stateClass = isActive ? 'border-l-4' : 'border-l-2';
-                const stateBorderColor = isActive ? 'var(--color-accent)' : 'var(--color-border)';
-                const stateColor = isActive ? 'var(--color-accent)' : 'var(--color-text-muted)';
-                const stateLabel = isActive ? 'Active' : 'Inactive';
-                const stateIcon = isActive ? 'ph-check-circle' : 'ph-circle';
-                
-                html += `
-                    <div class="glass-panel-inner rounded-lg p-3 ${stateClass} transition-all hover:bg-black/5" style="border-left-color: ${stateBorderColor};">
+
+            tabsContainer.innerHTML = tabs.map((tab) => {
+                const isActive = tab.tabState === "active";
+                const borderClass = isActive ? "border-l-4 border-l-black" : "border-l-2 border-l-gray-300";
+                const badgeClass = isActive ? "bg-black text-white" : "bg-gray-100 text-gray-600";
+                const stateLabel = isActive ? "Active" : "Inactive";
+                const stateIcon = isActive ? "ph-check-circle" : "ph-circle";
+
+                return `
+                    <div class="glass-panel-inner rounded-lg p-3 ${borderClass} transition-all hover:bg-gray-50">
                         <div class="flex items-start gap-3">
                             <div class="flex-shrink-0 mt-0.5">
-                                <i class="ph-fill ph-browser-chrome text-xl" style="color: var(--color-text-muted);"></i>
+                                <i class="ph-fill ph-browser-chrome text-xl text-gray-400"></i>
                             </div>
                             <div class="flex-1 min-w-0">
                                 <div class="flex items-start justify-between gap-2 mb-1">
-                                    <h5 class="font-medium text-sm truncate" style="color: var(--color-text-strong);" title="${escapeHtml(tab.title || 'Untitled')}">${escapeHtml(tab.title || 'Untitled')}</h5>
-                                    <span class="flex-shrink-0 inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full" style="background: ${isActive ? 'var(--color-accent-subtle)' : 'var(--color-glass-dark)'}; color: ${stateColor};">
+                                    <h5 class="font-medium text-sm truncate text-gray-900" title="${escapeHtml(tab.title || 'Untitled')}">${escapeHtml(tab.title || 'Untitled')}</h5>
+                                    <span class="flex-shrink-0 inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${badgeClass}">
                                         <i class="ph-fill ${stateIcon}"></i>
                                         ${stateLabel}
                                     </span>
                                 </div>
-                                <a href="${escapeHtml(tab.url || '#')}" target="_blank" rel="noopener noreferrer" class="text-xs truncate block hover:underline" style="color: var(--color-text-muted);" title="${escapeHtml(tab.url || '')}">${escapeHtml(tab.url || '')}</a>
+                                <a href="${escapeHtml(tab.url || '#')}" target="_blank" rel="noopener noreferrer" class="text-xs truncate block hover:underline text-gray-500" title="${escapeHtml(tab.url || '')}">${escapeHtml(tab.url || '')}</a>
                             </div>
                         </div>
                     </div>
                 `;
-            });
-            
-            tabsContainer.innerHTML = html;
+            }).join("");
         };
 
         const startTabsPolling = () => {
@@ -979,8 +1027,77 @@
             }
         };
 
+        const openDetailedView = (targetUsername) => {
+            const username = String(targetUsername || "").trim();
+            if (!username) {
+                return;
+            }
+
+            const userData = latestUsers.find((u) => normalizeUsername(u.username) === normalizeUsername(username));
+            if (!userData) {
+                return;
+            }
+
+            detailedViewUsername = username;
+            detailedViewUserData = userData;
+
+            const [avatarStart, avatarEnd] = getUserAvatarColors(username);
+            document.getElementById("detailed-view-username").textContent = username;
+            document.getElementById("detailed-view-user-name").textContent = username;
+            document.getElementById("detailed-view-avatar").style.background = `linear-gradient(135deg, ${avatarStart}, ${avatarEnd})`;
+            document.getElementById("detailed-view-avatar").textContent = String(username).slice(0, 2).toUpperCase() || "??";
+
+            const online = isUserOnline(userData);
+            const isSelf = isLeaderUser(userData);
+            const statusEl = document.getElementById("detailed-view-status");
+            statusEl.className = (online || isSelf)
+                ? "inline-flex items-center gap-1 text-sm presence-online"
+                : "inline-flex items-center gap-1 text-sm presence-offline";
+            statusEl.innerHTML = isSelf
+                ? '<i class="ph-fill ph-circle presence-icon presence-online"></i> You'
+                : (online
+                    ? '<i class="ph-fill ph-circle presence-icon presence-online"></i> Online'
+                    : '<i class="ph-fill ph-circle presence-icon presence-offline"></i> Offline');
+
+            document.getElementById("detailed-view-role").textContent = toRoleLabel(userData.role);
+            const totalWords = Math.floor(Number(userData.total_activity || 0) / 5);
+            document.getElementById("detailed-view-activity").textContent = `${formatNumber(totalWords)} words`;
+            document.getElementById("detailed-view-pings").textContent = formatNumber(userData.ping_count);
+            document.getElementById("detailed-view-efficiency").textContent = `${String(getWordsPerMinute(userData))} wpm`;
+
+            const screenshotBtn = document.getElementById("detailed-view-screenshot-btn");
+            const remindBtn = document.getElementById("detailed-view-remind-btn");
+            screenshotBtn.setAttribute("data-username", username);
+            remindBtn.setAttribute("data-username", username);
+
+            const modal = document.getElementById("detailed-view-modal");
+            modal.classList.remove("hidden");
+            modal.classList.add("flex");
+
+            requestUserTabs(username);
+            startTabsPolling();
+        };
+
+        const closeDetailedView = () => {
+            const modal = document.getElementById("detailed-view-modal");
+            modal.classList.add("hidden");
+            modal.classList.remove("flex");
+
+            detailedViewUsername = null;
+            detailedViewUserData = null;
+            stopTabsPolling();
+
+            document.getElementById("detailed-view-tabs").innerHTML = '<p class="text-sm text-center py-8 text-gray-500">Loading tabs...</p>';
+        };
+
         const initDashboard = (dashboardData) => {
-            const { leader = {}, summary = {}, users = [], daily = [], online_usernames: onlineUsers = [] } = dashboardData || {};
+            const {
+                leader = {},
+                summary = {},
+                users = [],
+                hourly = [],
+                online_usernames: onlineUsers = []
+            } = dashboardData || {};
 
             currentTeamId = Number(leader.team_id || 0);
             currentTeamName = String(leader.team_name || "").trim();
@@ -993,26 +1110,29 @@
 
             document.getElementById("stat-members").textContent = formatNumber(latestUsers.length);
             document.getElementById("stat-pings").textContent = formatNumber(summary.total_pings);
-            document.getElementById("stat-chars").textContent = formatNumber(summary.total_character_changes);
+            document.getElementById("stat-chars").textContent = formatNumber(Math.floor(Number(summary.total_character_changes || 0) / 5));
             document.getElementById("stat-services").textContent = formatNumber(summary.services_used);
 
-            if (daily.length > 0) {
-                const peakDay = daily.reduce((max, current) => {
-                    return Number(current.total_activity || 0) > Number(max.total_activity || 0) ? current : max;
-                }, daily[0]);
+            const hourlySeries = normalizeHourlySeries(hourly);
 
-                document.getElementById("stat-peak").textContent = formatNumber(peakDay.total_activity);
-                const peakDateObj = new Date(peakDay.day + "T00:00:00");
-                if (!Number.isNaN(peakDateObj.getTime())) {
-                    document.getElementById("stat-peak-date").textContent = "on " + new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(peakDateObj);
-                }
+            if (hourlySeries.length > 0) {
+                const peakHour = hourlySeries.reduce((max, current) => {
+                    return Number(current.total_activity || 0) > Number(max.total_activity || 0) ? current : max;
+                }, hourlySeries[0]);
+                const peakActivity = Number(peakHour.total_activity || 0);
+
+                document.getElementById("stat-peak").textContent = formatNumber(Math.floor(peakActivity / 5));
+                document.getElementById("stat-peak-date").textContent = peakActivity > 0
+                    ? `at ${formatHourLabel(peakHour.hour)}`
+                    : "...";
             } else {
                 document.getElementById("stat-peak").textContent = "0";
                 document.getElementById("stat-peak-date").textContent = "...";
             }
 
+            renderTeamActivityView(latestUsers);
             renderUserTable(latestUsers);
-            updateCharts(daily, latestUsers);
+            updateTeamChart(hourlySeries);
         };
 
         const loadDashboardData = async (options = {}) => {
@@ -1028,10 +1148,8 @@
             try {
                 const response = await fetch("/api/team-info", {
                     method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify(leaderCredentials),
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(leaderCredentials)
                 });
 
                 if (!response.ok) {
@@ -1079,11 +1197,9 @@
             if (!event || !event.team_id || !currentTeamId) {
                 return;
             }
-
             if (Number(event.team_id) !== Number(currentTeamId)) {
                 return;
             }
-
             requestDashboardRefresh({ suppressErrorBanner: true });
         });
 
@@ -1109,6 +1225,7 @@
                 onlineUsernames.delete(normalizedUsername);
             }
 
+            renderTeamActivityView(latestUsers);
             renderUserTable(latestUsers);
         });
 
@@ -1134,39 +1251,39 @@
                 failScreenshotRequest(event.error || "Unable to request screenshot right now.");
             }
         });
-        
+
         socket.on("remind_confirmed", (event) => {
             if (!event || typeof event !== "object") {
                 return;
             }
-            
+
             const targetUsername = String(event.targetUsername || "").trim();
             const normalizedUsername = normalizeUsername(targetUsername);
-            
-            updateRemindButtonState(targetUsername, 'idle');
+
+            updateRemindButtonState(targetUsername, "idle");
             remindRequestStates.delete(normalizedUsername);
-            
+
             setTimeout(() => {
                 socket.emit("request_screenshot", {
                     leaderUsername: leaderCredentials.username,
                     leaderSecret: leaderCredentials.secret,
                     team: currentTeamName,
-                    targetUsername: targetUsername,
+                    targetUsername
                 });
             }, 500);
         });
-        
+
         socket.on("remind_status", (event) => {
             if (!event || typeof event !== "object") {
                 return;
             }
-            
+
             const targetUsername = String(event.targetUsername || "").trim();
             const normalizedUsername = normalizeUsername(targetUsername);
-            
-            updateRemindButtonState(targetUsername, 'idle');
+
+            updateRemindButtonState(targetUsername, "idle");
             remindRequestStates.delete(normalizedUsername);
-            
+
             if (event.status === "error") {
                 showDashboardError(event.error || "Unable to send reminder right now.");
             }
@@ -1176,12 +1293,12 @@
             if (!event || typeof event !== "object") {
                 return;
             }
-            
+
             if (event.status === "error") {
-                document.getElementById("detailed-view-tabs").innerHTML = `<p class="text-sm text-center py-8" style="color: var(--color-text-muted);">${escapeHtml(event.error || "Unable to fetch tabs")}</p>`;
+                document.getElementById("detailed-view-tabs").innerHTML = `<p class="text-sm text-center py-8 text-gray-500">${escapeHtml(event.error || "Unable to fetch tabs")}</p>`;
                 return;
             }
-            
+
             if (Array.isArray(event.tabs)) {
                 renderUserTabs(event.tabs);
             }
@@ -1190,40 +1307,30 @@
         document.getElementById("user-table-body").addEventListener("click", (event) => {
             const detailedViewButton = event.target.closest("button[data-action='detailed-view']");
             if (detailedViewButton) {
-                const targetUsername = detailedViewButton.getAttribute("data-username");
-                openDetailedView(targetUsername);
+                openDetailedView(detailedViewButton.getAttribute("data-username"));
                 return;
             }
-            
+
             const seeScreenButton = event.target.closest("button[data-action='see-screen']");
             if (seeScreenButton) {
-                const targetUsername = seeScreenButton.getAttribute("data-username");
-                requestUserScreenshot(targetUsername);
+                requestUserScreenshot(seeScreenButton.getAttribute("data-username"));
                 return;
             }
-            
+
             const remindButton = event.target.closest("button[data-action='remind']");
             if (remindButton) {
-                const targetUsername = remindButton.getAttribute("data-username");
-                requestUserReminder(targetUsername);
-                return;
+                requestUserReminder(remindButton.getAttribute("data-username"));
             }
         });
 
-        document.getElementById("screenshot-modal-close").addEventListener("click", () => {
-            closeScreenshotModal();
-        });
-
+        document.getElementById("screenshot-modal-close").addEventListener("click", closeScreenshotModal);
         document.getElementById("screenshot-modal").addEventListener("click", (event) => {
             if (event.target.id === "screenshot-modal") {
                 closeScreenshotModal();
             }
         });
 
-        document.getElementById("detailed-view-close").addEventListener("click", () => {
-            closeDetailedView();
-        });
-
+        document.getElementById("detailed-view-close").addEventListener("click", closeDetailedView);
         document.getElementById("detailed-view-modal").addEventListener("click", (event) => {
             if (event.target.id === "detailed-view-modal") {
                 closeDetailedView();
@@ -1250,7 +1357,6 @@
 
         document.addEventListener("DOMContentLoaded", () => {
             loadDashboardData({ suppressErrorBanner: false });
-
             window.setInterval(() => {
                 requestDashboardRefresh({ suppressErrorBanner: true });
             }, FALLBACK_REFRESH_INTERVAL_MS);
@@ -1258,4 +1364,3 @@
     </script>
 </body>
 </html>
-
