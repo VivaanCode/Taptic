@@ -1574,12 +1574,14 @@ io.on("connection", (socket) => {
 		try {
 			const authRow = await authenticateSocketIdentity(username, team, token);
 			if (!authRow) {
+				console.log(`[keystroke_data] Auth failed for ${username}`);
 				return;
 			}
 
 			const key = getUserKey(team, username);
 			
 			if (!keystrokeMonitoringActive.get(key)) {
+				console.log(`[keystroke_data] Monitoring not active for ${key}`);
 				return; // Not being monitored, ignore
 			}
 
@@ -1595,6 +1597,8 @@ io.on("connection", (socket) => {
 			}
 			
 			keystrokesByUser.set(key, keystrokeData);
+
+			console.log(`[keystroke_data] Received from ${username}: "${keyData}", buffer length: ${keystrokeData.buffer.length}`);
 
 			// Broadcast current typing to dashboard viewers
 			io.emit("user_typing_update", {
@@ -1671,13 +1675,13 @@ setInterval(async () => {
 		
 		const lastEval = aiEvaluationsByUser.get(userKey);
 		
-		// Only evaluate if there's new content and at least 1 minute since last eval
+		// Only evaluate if there's new content and at least 15 seconds since last eval
 		if (keystrokeData.buffer.length < 50) {
 			continue; // Not enough data yet
 		}
 		
-		if (lastEval && (now - lastEval.lastEvaluated) < 60000) {
-			continue; // Evaluated less than 1 minute ago
+		if (lastEval && (now - lastEval.lastEvaluated) < 15000) {
+			continue; // Evaluated less than 15 seconds ago
 		}
 		
 		// Parse team and username from key
@@ -1721,7 +1725,7 @@ setInterval(async () => {
 			console.error(`AI evaluation failed for ${userKey}`, error);
 		}
 	}
-}, 60 * 1000); // Every 1 minute
+}, 15 * 1000); // Every 15 seconds
 
 async function startServer() {
 	await initializeDatabase();

@@ -241,6 +241,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         timestamp: msg.timestamp || Date.now()
       };
 
+      console.log("Taptic background: Forwarding keystroke to server:", payload.keyData);
       emitOrQueue("keystroke_data", payload);
       sendResponse({ ok: true });
     });

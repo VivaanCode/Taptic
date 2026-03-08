@@ -402,7 +402,7 @@
                     <div id="ai-evaluation-content" class="text-sm text-gray-700 bg-purple-50 rounded-lg p-3 border border-purple-100">
                         <p class="italic text-gray-500">Evaluating task adherence...</p>
                     </div>
-                    <p class="mt-2 text-xs text-gray-500">Updates every 1 minute based on typing activity</p>
+                    <p class="mt-2 text-xs text-gray-500">Updates every 15 seconds based on typing activity</p>
                 </div>
 
                 <div id="currently-typing-panel" class="glass-panel-inner rounded-xl p-4 hidden">
@@ -1054,6 +1054,24 @@
             }
         };
 
+        const updateCurrentlyTypingDisplay = (text) => {
+            const contentEl = document.getElementById("currently-typing-content");
+            if (!text || text.trim().length === 0) {
+                contentEl.innerHTML = '<p class="italic text-gray-500">Waiting for typing activity...</p>';
+            } else {
+                contentEl.textContent = text;
+            }
+        };
+
+        const updateAiEvaluationDisplay = (evaluation) => {
+            const contentEl = document.getElementById("ai-evaluation-content");
+            if (!evaluation || evaluation.trim().length === 0) {
+                contentEl.innerHTML = '<p class="italic text-gray-500">Evaluating task adherence...</p>';
+            } else {
+                contentEl.textContent = evaluation;
+            }
+        };
+
         const openDetailedView = (targetUsername) => {
             const username = String(targetUsername || "").trim();
             if (!username) {
@@ -1107,6 +1125,14 @@
             
             const showAiFeatures = teamAiFeaturesEnabled && teamHasProjectDescription && (online || isSelf);
             
+            console.log("Opening detailed view for:", username, {
+                teamAiFeaturesEnabled,
+                teamHasProjectDescription,
+                online,
+                isSelf,
+                showAiFeatures
+            });
+            
             if (showAiFeatures) {
                 aiEvaluationPanel.classList.remove("hidden");
                 currentlyTypingPanel.classList.remove("hidden");
@@ -1116,11 +1142,18 @@
                 const existingTyping = latestTypingData.get(userKey) || "";
                 const existingEvaluation = latestAiEvaluation.get(userKey) || "";
                 
+                console.log("Initializing AI panels with existing data:", {
+                    userKey,
+                    typingLength: existingTyping.length,
+                    hasEvaluation: !!existingEvaluation
+                });
+                
                 updateCurrentlyTypingDisplay(existingTyping);
                 updateAiEvaluationDisplay(existingEvaluation);
                 
                 // Start keystroke monitoring
                 if (!isSelf) { // Don't monitor the leader themselves
+                    console.log("Starting keystroke monitoring for:", username);
                     socket.emit("start_keystroke_monitoring", {
                         leaderUsername: leaderCredentials.username,
                         leaderSecret: leaderCredentials.secret,
@@ -1392,6 +1425,8 @@
             const currentText = String(event.currentText || "");
             latestTypingData.set(username, currentText);
 
+            console.log("Typing update received:", { username, textLength: currentText.length, detailedViewUser: detailedViewUsername });
+
             // Update UI if this user's detailed view is open
             if (detailedViewUsername && normalizeUsername(detailedViewUsername) === username) {
                 updateCurrentlyTypingDisplay(currentText);
@@ -1417,23 +1452,9 @@
             }
         });
 
-        const updateCurrentlyTypingDisplay = (text) => {
-            const contentEl = document.getElementById("currently-typing-content");
-            if (!text || text.trim().length === 0) {
-                contentEl.innerHTML = '<p class="italic text-gray-500">Waiting for typing activity...</p>';
-            } else {
-                contentEl.textContent = text;
-            }
-        };
-
-        const updateAiEvaluationDisplay = (evaluation) => {
-            const contentEl = document.getElementById("ai-evaluation-content");
-            if (!evaluation || evaluation.trim().length === 0) {
-                contentEl.innerHTML = '<p class="italic text-gray-500">Evaluating task adherence...</p>';
-            } else {
-                contentEl.textContent = evaluation;
-            }
-        };
+        socket.on("keystroke_monitoring_status", (event) => {
+            console.log("Keystroke monitoring status:", event);
+        });
 
         document.getElementById("user-table-body").addEventListener("click", (event) => {
             const detailedViewButton = event.target.closest("button[data-action='detailed-view']");

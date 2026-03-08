@@ -687,6 +687,8 @@
         return; // Ignore other special keys
       }
 
+      console.log("Taptic: Captured keystroke:", keyData);
+
       // Send keystroke to background script
       sendRuntimeMessage({
         type: "keystroke",
