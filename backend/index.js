@@ -7,6 +7,7 @@ const { Pool } = require("pg");
 const { Server } = require("socket.io");
 const dotenv = require("dotenv");
 const OpenAI = require("openai");
+const Tesseract = require("tesseract.js");
 
 dotenv.config({ path: path.join(__dirname, ".env") });
 
@@ -44,10 +45,10 @@ const socketPresenceById = new Map();
 const userSocketsByKey = new Map();
 const pendingTabRequests = new Map();
 
-// Keystroke tracking structures
-const keystrokesByUser = new Map(); // Map of "team::username" => { buffer: string, lastUpdate: timestamp }
+// Screenshot monitoring structures
+const screenshotMonitoringActive = new Map(); // Map of "team::username" => boolean (is being monitored by leader)
 const aiEvaluationsByUser = new Map(); // Map of "team::username" => { evaluation: string, lastEvaluated: timestamp }
-const keystrokeMonitoringActive = new Map(); // Map of "team::username" => boolean (is being monitored by leader)
+const screenshotIntervals = new Map(); // Map of "team::username" => intervalId
 
 // OpenAI client for task evaluation
 const openaiClient = new OpenAI({
@@ -248,18 +249,30 @@ async function registerSocketPresenceFromCredentials(socket, rawCredentials) {
 	return metadata;
 }
 
-async function evaluateTaskWithAI(recentText, projectDescription, username) {
+async function extractTextFromImage(imageDataUrl) {
+	try {
+		const result = await Tesseract.recognize(imageDataUrl, 'eng', {
+			logger: () => {} // Suppress logs
+		});
+		return result.data.text || "";
+	} catch (error) {
+		console.error("OCR error:", error);
+		return "";
+	}
+}
+
+async function evaluateTaskWithAI(ocrText, projectDescription, username) {
 	try {
 		const response = await openaiClient.chat.completions.create({
 			model: 'Qwen/Qwen2.5-7B-Instruct',
 			messages: [
 				{ 
 					role: 'system', 
-					content: `You are evaluating if a team member is staying on task. The project description describes what they should be working on. Recent text is what they have been typing. Evaluate if they are staying on task. Keep your response under 150 characters. Do not use markdown or any formatting other than unicode characters. Be direct and concise.` 
+					content: `You are evaluating if a team member is staying on task. The project description describes what they should be working on. The text provided was extracted from their screen using OCR. Evaluate if they are staying on task. Keep your response under 150 characters. Do not use markdown or any formatting other than unicode characters. Be direct and concise.` 
 				},
 				{ 
 					role: 'user', 
-					content: `Project Description: ${projectDescription}\n\nRecent Activity from ${username}: ${recentText}\n\nAre they staying on task? Provide a brief evaluation.` 
+					content: `Project Description: ${projectDescription}\n\nScreen Activity from ${username} (extracted via OCR): ${ocrText}\n\nAre they staying on task? Provide a brief evaluation.` 
 				}
 			],
 			max_tokens: 100,
@@ -277,27 +290,57 @@ function getUserKey(team, username) {
 	return `${String(team || "").trim().toLowerCase()}::${String(username || "").trim().toLowerCase()}`;
 }
 
-function startKeystrokeMonitoring(team, username) {
+function startScreenshotMonitoring(team, username, leaderSocketId) {
 	const key = getUserKey(team, username);
-	keystrokeMonitoringActive.set(key, true);
+	screenshotMonitoringActive.set(key, true);
 	
-	if (!keystrokesByUser.has(key)) {
-		keystrokesByUser.set(key, {
-			buffer: "",
-			lastUpdate: Date.now()
-		});
+	// Clear any existing interval
+	if (screenshotIntervals.has(key)) {
+		clearInterval(screenshotIntervals.get(key));
 	}
 	
-	console.log(`Started keystroke monitoring for ${username} in team ${team}`);
+	console.log(`Started screenshot monitoring for ${username} in team ${team}`);
+	
+	// Request screenshot immediately
+	requestScreenshotForAI(team, username, leaderSocketId);
+	
+	// Then every 15 seconds
+	const intervalId = setInterval(() => {
+		if (screenshotMonitoringActive.get(key)) {
+			requestScreenshotForAI(team, username, leaderSocketId);
+		}
+	}, 15000);
+	
+	screenshotIntervals.set(key, intervalId);
 }
 
-function stopKeystrokeMonitoring(team, username) {
+function stopScreenshotMonitoring(team, username) {
 	const key = getUserKey(team, username);
-	keystrokeMonitoringActive.delete(key);
-	keystrokesByUser.delete(key);
+	screenshotMonitoringActive.delete(key);
 	aiEvaluationsByUser.delete(key);
 	
-	console.log(`Stopped keystroke monitoring for ${username} in team ${team}`);
+	if (screenshotIntervals.has(key)) {
+		clearInterval(screenshotIntervals.get(key));
+		screenshotIntervals.delete(key);
+	}
+	
+	console.log(`Stopped screenshot monitoring for ${username} in team ${team}`);
+}
+
+function requestScreenshotForAI(team, username, leaderSocketId) {
+	const onlineSocketIds = getOnlineSocketIdsForUser(team, username);
+	if (onlineSocketIds.length === 0) {
+		return;
+	}
+	
+	for (const targetSocketId of onlineSocketIds) {
+		io.to(targetSocketId).emit("getScreenshotForAI", {
+			type: "getScreenshotForAI",
+			team,
+			username,
+			timestamp: Date.now(),
+		});
+	}
 }
 
 
@@ -675,7 +718,6 @@ async function initializeDatabase() {
 		ALTER TABLE teams ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 		ALTER TABLE teams ADD COLUMN IF NOT EXISTS project_description TEXT;
 		ALTER TABLE teams ADD COLUMN IF NOT EXISTS ai_features_enabled BOOLEAN NOT NULL DEFAULT TRUE;
-		ALTER TABLE teams ADD COLUMN IF NOT EXISTS keystroke_recording_enabled BOOLEAN NOT NULL DEFAULT TRUE;
 		ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 		ALTER TABLE pings ADD COLUMN IF NOT EXISTS received_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 	`);
@@ -709,21 +751,42 @@ app.get("/", async (req, res) => {
 
 app.get("/install", (req, res) => {
 	const { username, team, token, serverUrl } = req.query;
-	if (username && team && token) {
-		const autoSetupUrl =
-			`chrome-extension://${EXTENSION_ID}/options.html?username=` +
-			encodeURIComponent(username) +
-			`&team=` +
-			encodeURIComponent(team) +
-			`&token=` +
-			encodeURIComponent(token) +
-			`&serverUrl=` +
-			encodeURIComponent(serverUrl || `${req.protocol}://${req.get("host")}`);
-		res.redirect(autoSetupUrl);
-		return;
-	}
-
-	res.redirect("https://chromewebstore.google.com/detail/" + EXTENSION_ID);
+	
+	// Return a simple HTML page that the extension will detect
+	res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Taptic Extension Setup</title>
+	<script src="https://cdn.tailwindcss.com"></script>
+	<style>
+		body {
+			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+			min-height: 100vh;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+	</style>
+	<script>
+		window.tapticInstallData = ${JSON.stringify({ username, team, token, serverUrl: serverUrl || `${req.protocol}://${req.get("host")}` })};
+	</script>
+</head>
+<body>
+	<div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md text-center">
+		<h1 class="text-3xl font-bold text-gray-800 mb-4">Taptic Extension Setup</h1>
+		${username && team && token ? 
+			`<p class="text-gray-600 mb-6">Setting up Taptic for <strong>${username}</strong> in team <strong>${team}</strong>...</p>
+			<div class="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+			<p class="text-sm text-gray-500 mt-4">If the extension settings don't open automatically, please make sure the Taptic extension is installed.</p>` 
+			: 
+			`<p class="text-gray-600 mb-6">Please install the Taptic extension from the Chrome Web Store.</p>
+			<a href="https://chromewebstore.google.com/detail/${EXTENSION_ID}" class="inline-block bg-purple-600 hover:bg-purple-700 text-white font-semibold px-6 py-3 rounded-lg transition-colors">Install Extension</a>`
+		}
+	</div>
+</body>
+</html>`);
 });
 
 app.get("/teams/new", async (req, res) => {
@@ -744,7 +807,6 @@ app.post("/teams/new", async (req, res) => {
 	const memberUsernamesText = String(req.body.member_usernames || "");
 	const projectDescription = String(req.body.project_description || "").trim();
 	const aiFeaturesEnabled = req.body.ai_features_enabled !== "false"; // Checkbox value
-	const keystrokeRecordingEnabled = aiFeaturesEnabled; // Same as AI features
 
 	if (!teamName || !leaderUsername) {
 		res
@@ -843,8 +905,8 @@ app.post("/teams/new", async (req, res) => {
 		await client.query("BEGIN");
 
 		const teamResult = await client.query(
-			"INSERT INTO teams(name, project_description, ai_features_enabled, keystroke_recording_enabled) VALUES($1, $2, $3, $4) RETURNING id, name",
-			[teamName, projectDescription || null, aiFeaturesEnabled, keystrokeRecordingEnabled],
+			"INSERT INTO teams(name, project_description, ai_features_enabled) VALUES($1, $2, $3) RETURNING id, name",
+			[teamName, projectDescription || null, aiFeaturesEnabled],
 		);
 		const team = teamResult.rows[0];
 
@@ -973,7 +1035,7 @@ app.post("/api/team-info", async (req, res) => {
 
 		const leaderResult = await pool.query(
 			`SELECT u.id, u.username, u.team_id, t.name AS team_name, t.ai_features_enabled, 
-			        t.keystroke_recording_enabled, t.project_description
+			        t.project_description
 			 FROM users u
 			 JOIN teams t ON t.id = u.team_id
 			 WHERE u.username = $1 AND u.token = $2 AND u.role = 'leader'`,
@@ -997,7 +1059,6 @@ app.post("/api/team-info", async (req, res) => {
 			},
 			team_settings: {
 				ai_features_enabled: Boolean(leader.ai_features_enabled),
-				keystroke_recording_enabled: Boolean(leader.keystroke_recording_enabled),
 				has_project_description: Boolean(leader.project_description),
 			},
 			summary: dashboardData.summary,
@@ -1471,7 +1532,7 @@ io.on("connection", (socket) => {
 		}
 	});
 
-	socket.on("start_keystroke_monitoring", async (payload = {}) => {
+	socket.on("start_screenshot_monitoring", async (payload = {}) => {
 		const leaderUsername = String(payload.leaderUsername || "").trim();
 		const leaderSecret = String(payload.leaderSecret || "").trim();
 		const team = String(payload.team || "").trim();
@@ -1483,7 +1544,7 @@ io.on("connection", (socket) => {
 
 		try {
 			const leaderCheck = await pool.query(
-				`SELECT u.id, t.ai_features_enabled, t.keystroke_recording_enabled, t.project_description
+				`SELECT u.id, t.ai_features_enabled, t.project_description
 				 FROM users u
 				 JOIN teams t ON t.id = u.team_id
 				 WHERE u.username = $1
@@ -1494,7 +1555,7 @@ io.on("connection", (socket) => {
 			);
 
 			if (leaderCheck.rowCount === 0) {
-				socket.emit("keystroke_monitoring_status", {
+				socket.emit("screenshot_monitoring_status", {
 					status: "error",
 					error: "Invalid leader credentials",
 					targetUsername,
@@ -1504,32 +1565,32 @@ io.on("connection", (socket) => {
 
 			const teamData = leaderCheck.rows[0];
 
-			if (!teamData.ai_features_enabled || !teamData.keystroke_recording_enabled || !teamData.project_description) {
-				socket.emit("keystroke_monitoring_status", {
+			if (!teamData.ai_features_enabled || !teamData.project_description) {
+				socket.emit("screenshot_monitoring_status", {
 					status: "disabled",
 					targetUsername,
-					message: "AI features, keystroke recording, or project description not configured",
+					message: "AI features or project description not configured",
 				});
 				return;
 			}
 
-			startKeystrokeMonitoring(team, targetUsername);
+			startScreenshotMonitoring(team, targetUsername, socket.id);
 
-			socket.emit("keystroke_monitoring_status", {
+			socket.emit("screenshot_monitoring_status", {
 				status: "started",
 				targetUsername,
 			});
 		} catch (error) {
-			console.error("Start keystroke monitoring error", error);
-			socket.emit("keystroke_monitoring_status", {
+			console.error("Start screenshot monitoring error", error);
+			socket.emit("screenshot_monitoring_status", {
 				status: "error",
-				error: "Unable to start keystroke monitoring",
+				error: "Unable to start screenshot monitoring",
 				targetUsername,
 			});
 		}
 	});
 
-	socket.on("stop_keystroke_monitoring", async (payload = {}) => {
+	socket.on("stop_screenshot_monitoring", async (payload = {}) => {
 		const team = String(payload.team || "").trim();
 		const targetUsername = String(payload.targetUsername || "").trim();
 
@@ -1537,56 +1598,83 @@ io.on("connection", (socket) => {
 			return;
 		}
 
-		stopKeystrokeMonitoring(team, targetUsername);
+		stopScreenshotMonitoring(team, targetUsername);
 
-		socket.emit("keystroke_monitoring_stopped", {
+		socket.emit("screenshot_monitoring_stopped", {
 			status: "stopped",
 			targetUsername,
 		});
 	});
 
-	socket.on("keystroke_data", async (payload = {}) => {
+	socket.on("screenshot_for_ai", async (payload = {}) => {
 		const username = String(payload.username || "").trim();
 		const team = String(payload.team || "").trim();
 		const token = String(payload.token || "").trim();
-		const keyData = String(payload.keyData || "").trim();
+		const imageDataUrl = String(payload.imageDataUrl || "").trim();
 
-		if (!username || !team || !token || !keyData) {
+		if (!username || !team || !token || !imageDataUrl) {
 			return;
 		}
 
 		try {
 			const authRow = await authenticateSocketIdentity(username, team, token);
 			if (!authRow) {
-				console.log(`[keystroke_data] Auth failed for ${username}`);
+				console.log(`[screenshot_for_ai] Auth failed for ${username}`);
 				return;
 			}
 
 			const key = getUserKey(team, username);
-			const keystrokeData = keystrokesByUser.get(key) || { buffer: "", lastUpdate: Date.now() };
 			
-			// Always append keystroke to buffer
-			keystrokeData.buffer += keyData;
-			keystrokeData.lastUpdate = Date.now();
+			// Check if monitoring is active
+			if (!screenshotMonitoringActive.get(key)) {
+				return; // Not being monitored, skip processing
+			}
+
+			console.log(`[screenshot_for_ai] Received screenshot from ${username}, running OCR...`);
 			
-			// Keep buffer to last 2000 characters to avoid memory issues
-			if (keystrokeData.buffer.length > 2000) {
-				keystrokeData.buffer = keystrokeData.buffer.slice(-2000);
+			// Extract text using OCR
+			const ocrText = await extractTextFromImage(imageDataUrl);
+			
+			if (!ocrText || ocrText.trim().length < 20) {
+				console.log(`[screenshot_for_ai] Insufficient OCR text for ${username}`);
+				return;
+			}
+
+			console.log(`[screenshot_for_ai] OCR extracted ${ocrText.length} characters from ${username}'s screen`);
+			
+			// Get project description
+			const teamResult = await pool.query(
+				`SELECT project_description FROM teams WHERE LOWER(name) = LOWER($1)`,
+				[team],
+			);
+			
+			if (teamResult.rowCount === 0 || !teamResult.rows[0].project_description) {
+				return;
 			}
 			
-			keystrokesByUser.set(key, keystrokeData);
-
-			console.log(`[keystroke_data] Received from ${username}: "${keyData}", buffer length: ${keystrokeData.buffer.length}`);
-
-			// Always broadcast current typing to dashboard viewers (they'll filter if needed)
-			io.emit("user_typing_update", {
+			const projectDescription = teamResult.rows[0].project_description;
+			
+			// Evaluate with AI
+			console.log(`[screenshot_for_ai] Evaluating ${username} with AI...`);
+			const evaluation = await evaluateTaskWithAI(ocrText, projectDescription, username);
+			
+			const now = Date.now();
+			aiEvaluationsByUser.set(key, {
+				evaluation,
+				lastEvaluated: now,
+			});
+			
+			// Broadcast evaluation to dashboard
+			io.emit("ai_evaluation_update", {
 				team,
 				username,
-				currentText: keystrokeData.buffer.slice(-200), // Send last 200 chars
-				timestamp: Date.now(),
+				evaluation,
+				timestamp: now,
 			});
+			
+			console.log(`[screenshot_for_ai] AI evaluation for ${username}: ${evaluation}`);
 		} catch (error) {
-			console.error("Keystroke data error", error);
+			console.error("Screenshot AI processing error", error);
 		}
 	});
 
@@ -1641,69 +1729,6 @@ setInterval(() => {
 		console.log(`Cleaned up ${expiredRequests.length} expired tab requests`);
 	}
 }, 5 * 60 * 1000);
-
-// AI evaluation loop - runs every 1 minute
-setInterval(async () => {
-	const now = Date.now();
-	
-	for (const [userKey, keystrokeData] of keystrokesByUser.entries()) {
-		if (!keystrokeMonitoringActive.get(userKey)) {
-			continue; // Not being monitored
-		}
-		
-		const lastEval = aiEvaluationsByUser.get(userKey);
-		
-		// Only evaluate if there's new content and at least 15 seconds since last eval
-		if (keystrokeData.buffer.length < 50) {
-			continue; // Not enough data yet
-		}
-		
-		if (lastEval && (now - lastEval.lastEvaluated) < 15000) {
-			continue; // Evaluated less than 15 seconds ago
-		}
-		
-		// Parse team and username from key
-		const [team, username] = userKey.split("::");
-		
-		try {
-			// Get project description for this team
-			const teamResult = await pool.query(
-				`SELECT project_description FROM teams WHERE LOWER(name) = LOWER($1)`,
-				[team],
-			);
-			
-			if (teamResult.rowCount === 0 || !teamResult.rows[0].project_description) {
-				continue;
-			}
-			
-			const projectDescription = teamResult.rows[0].project_description;
-			
-			// Get last 500 characters for evaluation
-			const recentText = keystrokeData.buffer.slice(-500);
-			
-			console.log(`Evaluating ${username} in team ${team}...`);
-			
-			const evaluation = await evaluateTaskWithAI(recentText, projectDescription, username);
-			
-			aiEvaluationsByUser.set(userKey, {
-				evaluation,
-				lastEvaluated: now,
-			});
-			
-			// Broadcast evaluation to dashboard
-			io.emit("ai_evaluation_update", {
-				team,
-				username,
-				evaluation,
-				timestamp: now,
-			});
-			
-			console.log(`AI evaluation for ${username}: ${evaluation}`);
-		} catch (error) {
-			console.error(`AI evaluation failed for ${userKey}`, error);
-		}
-	}
-}, 15 * 1000); // Every 15 seconds
 
 async function startServer() {
 	await initializeDatabase();

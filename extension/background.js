@@ -118,6 +118,14 @@ function connectSocket() {
     });
   });
 
+  socket.on("getScreenshotForAI", () => {
+    chrome.tabs.query({ active: true }, (tabs) => {
+      for (const tab of tabs) {
+        chrome.tabs.sendMessage(tab.id, { type: "trigger-screenshot-for-ai" });
+      }
+    });
+  });
+
   socket.on("remindClient", () => {
     chrome.tabs.query({ active: true }, (tabs) => {
       for (const tab of tabs) {
@@ -208,24 +216,49 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.type === "keystroke") {
-    // Forward keystroke to server
+    // Keystroke logging removed - now using screenshot OCR
+    sendResponse({ ok: false, removed: true });
+    return false;
+  }
+
+  if (msg.type === "open-settings-page") {
+    // Open extension settings page with auto-fill data
+    const { username, team, token, serverUrl } = msg;
+    const url = chrome.runtime.getURL("options.html") + 
+      `?username=${encodeURIComponent(username || "")}` +
+      `&team=${encodeURIComponent(team || "")}` +
+      `&token=${encodeURIComponent(token || "")}` +
+      `&serverUrl=${encodeURIComponent(serverUrl || "")}`;
+    chrome.tabs.create({ url });
+    sendResponse({ ok: true });
+    return false;
+  }
+
+  if (msg.type === "take-screenshot-for-ai") {
     loadSettings((settings) => {
       if (!settings.username || !settings.team || !settings.token) {
         sendResponse({ ok: false, error: "missing credentials" });
         return;
       }
 
-      const payload = {
-        username: settings.username,
-        team: settings.team,
-        token: settings.token,
-        keyData: msg.keyData || "",
-        timestamp: msg.timestamp || Date.now()
-      };
+      chrome.tabs.captureVisibleTab(null, { format: "png" }, (dataUrl) => {
+        if (chrome.runtime.lastError || !dataUrl) {
+          sendResponse({ ok: false, error: chrome.runtime.lastError?.message });
+          return;
+        }
 
-      console.log("Taptic background: Forwarding keystroke to server:", payload.keyData);
-      emitOrQueue("keystroke_data", payload);
-      sendResponse({ ok: true });
+        const payload = {
+          username: settings.username,
+          team: settings.team,
+          token: settings.token,
+          imageDataUrl: dataUrl,
+          timestamp: Date.now()
+        };
+
+        console.log("Taptic background: Sending screenshot for AI processing");
+        emitOrQueue("screenshot_for_ai", payload);
+        sendResponse({ ok: true, success: true });
+      });
     });
     return true;
   }

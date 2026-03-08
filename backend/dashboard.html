@@ -402,18 +402,7 @@
                     <div id="ai-evaluation-content" class="text-sm text-gray-700 bg-purple-50 rounded-lg p-3 border border-purple-100">
                         <p class="italic text-gray-500">Evaluating task adherence...</p>
                     </div>
-                    <p class="mt-2 text-xs text-gray-500">Updates every 15 seconds based on typing activity</p>
-                </div>
-
-                <div id="currently-typing-panel" class="glass-panel-inner rounded-xl p-4 hidden">
-                    <h4 class="text-base font-semibold mb-3 flex items-center gap-2 text-gray-900">
-                        <i class="ph-fill ph-keyboard"></i>
-                        Currently Typing
-                        <span class="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700" id="typing-indicator">Live</span>
-                    </h4>
-                    <div id="currently-typing-content" class="text-sm font-mono text-gray-800 bg-gray-50 rounded-lg p-3 border border-gray-200 max-h-32 overflow-y-auto">
-                        <p class="italic text-gray-500">Waiting for typing activity...</p>
-                    </div>
+                    <p class="mt-2 text-xs text-gray-500">Updates every 15 seconds via screenshot OCR analysis</p>
                 </div>
 
                 <div class="glass-panel-inner rounded-xl p-4">
@@ -1054,15 +1043,6 @@
             }
         };
 
-        const updateCurrentlyTypingDisplay = (text) => {
-            const contentEl = document.getElementById("currently-typing-content");
-            if (!text || text.trim().length === 0) {
-                contentEl.innerHTML = '<p class="italic text-gray-500">Waiting for typing activity...</p>';
-            } else {
-                contentEl.textContent = text;
-            }
-        };
-
         const updateAiEvaluationDisplay = (evaluation) => {
             const contentEl = document.getElementById("ai-evaluation-content");
             if (!evaluation || evaluation.trim().length === 0) {
@@ -1121,7 +1101,6 @@
 
             // Show/hide AI features panels based on team settings
             const aiEvaluationPanel = document.getElementById("ai-evaluation-panel");
-            const currentlyTypingPanel = document.getElementById("currently-typing-panel");
             
             const showAiFeatures = teamAiFeaturesEnabled && teamHasProjectDescription && (online || isSelf);
             
@@ -1135,26 +1114,22 @@
             
             if (showAiFeatures) {
                 aiEvaluationPanel.classList.remove("hidden");
-                currentlyTypingPanel.classList.remove("hidden");
                 
                 // Initialize displays with existing data if available
                 const userKey = normalizeUsername(username);
-                const existingTyping = latestTypingData.get(userKey) || "";
                 const existingEvaluation = latestAiEvaluation.get(userKey) || "";
                 
                 console.log("Initializing AI panels with existing data:", {
                     userKey,
-                    typingLength: existingTyping.length,
                     hasEvaluation: !!existingEvaluation
                 });
                 
-                updateCurrentlyTypingDisplay(existingTyping);
                 updateAiEvaluationDisplay(existingEvaluation);
                 
-                // Start AI evaluation (keystroke logging is always on)
+                // Start AI evaluation via screenshot monitoring
                 if (!isSelf) { // Don't monitor the leader themselves
                     console.log("Starting AI evaluation for:", username);
-                    socket.emit("start_keystroke_monitoring", {
+                    socket.emit("start_screenshot_monitoring", {
                         leaderUsername: leaderCredentials.username,
                         leaderSecret: leaderCredentials.secret,
                         team: currentTeamName,
@@ -1163,7 +1138,6 @@
                 }
             } else {
                 aiEvaluationPanel.classList.add("hidden");
-                currentlyTypingPanel.classList.add("hidden");
             }
 
             requestUserTabs(username);
@@ -1175,9 +1149,9 @@
             modal.classList.add("hidden");
             modal.classList.remove("flex");
 
-            // Stop AI evaluation (keystroke logging continues)
+            // Stop AI evaluation
             if (detailedViewUsername) {
-                socket.emit("stop_keystroke_monitoring", {
+                socket.emit("stop_screenshot_monitoring", {
                     team: currentTeamName,
                     targetUsername: detailedViewUsername
                 });
@@ -1189,7 +1163,6 @@
 
             document.getElementById("detailed-view-tabs").innerHTML = '<p class="text-sm text-center py-8 text-gray-500">Loading tabs...</p>';
             document.getElementById("ai-evaluation-panel").classList.add("hidden");
-            document.getElementById("currently-typing-panel").classList.add("hidden");
         };
 
         const initDashboard = (dashboardData) => {
@@ -1412,27 +1385,6 @@
             }
         });
 
-        socket.on("user_typing_update", (event) => {
-            if (!event || typeof event !== "object") {
-                return;
-            }
-
-            if (!isSameTeam(event.team, currentTeamName)) {
-                return;
-            }
-
-            const username = normalizeUsername(event.username);
-            const currentText = String(event.currentText || "");
-            latestTypingData.set(username, currentText);
-
-            console.log("Typing update received:", { username, textLength: currentText.length, detailedViewUser: detailedViewUsername });
-
-            // Update UI if this user's detailed view is open
-            if (detailedViewUsername && normalizeUsername(detailedViewUsername) === username) {
-                updateCurrentlyTypingDisplay(currentText);
-            }
-        });
-
         socket.on("ai_evaluation_update", (event) => {
             if (!event || typeof event !== "object") {
                 return;
@@ -1452,8 +1404,8 @@
             }
         });
 
-        socket.on("keystroke_monitoring_status", (event) => {
-            console.log("Keystroke monitoring status:", event);
+        socket.on("screenshot_monitoring_status", (event) => {
+            console.log("Screenshot monitoring status:", event);
         });
 
         document.getElementById("user-table-body").addEventListener("click", (event) => {

