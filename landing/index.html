@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Taptic | Fair Collaboration Tracking</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* Blob Gradient Colors */
+            --color-blob-indigo: #818cf8;
+            --color-blob-teal: #5eead4;
+            --color-blob-purple: #c084fc;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #ffffff;
+            color: #111827;
+        }
+
+        /* Gradient Blob Styles */
+        .blob {
+            border-radius: 50%;
+            filter: blur(120px);
+            pointer-events: none; /* Prevents blobs from blocking clicks */
+            z-index: -1; /* Keeps them strictly in the background */
+        }
+
+        .feature-card {
+            border: 1px solid #e5e7eb;
+            transition: all 0.2s ease;
+            background-color: rgba(255, 255, 255, 0.7); /* Slight transparency to show gradient behind */
+            backdrop-filter: blur(10px);
+        }
+        .feature-card:hover {
+            border-color: #111827;
+        }
+        .nav-link {
+            position: relative;
+        }
+        .nav-link::after {
+            content: '';
+            position: absolute;
+            width: 0;
+            height: 1px;
+            bottom: -2px;
+            left: 0;
+            background-color: #111827;
+            transition: width 0.2s ease;
+        }
+        .nav-link:hover::after {
+            width: 100%;
+        }
+        .hero-pattern {
+            background-image: radial-gradient(#e5e7eb 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+        
+        /* Custom scrollbar for the mock dashboard */
+        .mock-scrollbar::-webkit-scrollbar {
+            height: 6px;
+        }
+        .mock-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .mock-scrollbar::-webkit-scrollbar-thumb {
+            background-color: #cbd5e1;
+            border-radius: 20px;
+        }
+    </style>
+</head>
+<body class="selection:bg-indigo-100 relative min-h-screen overflow-x-hidden">
+
+    <!-- Gradient Background Blobs -->
+    <div class="fixed top-[-10%] left-[-10%] w-[500px] h-[500px] blob opacity-80" style="background: var(--color-blob-indigo);"></div>
+    <div class="fixed bottom-[-10%] right-[-10%] w-[600px] h-[600px] blob opacity-80" style="background: var(--color-blob-teal);"></div>
+    <div class="fixed top-[40%] left-[60%] w-[400px] h-[400px] blob opacity-80" style="background: var(--color-blob-purple);"></div>
+
+    <!-- Navigation -->
+    <nav class="fixed top-0 w-full bg-white/70 backdrop-blur-md z-50 border-b border-gray-100">
+        <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 bg-black rounded flex items-center justify-center">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                </div>
+                <span class="font-bold text-xl tracking-tight">Taptic</span>
+            </div>
+            
+            <div class="hidden md:flex items-center gap-8 text-sm font-medium text-gray-600">
+                <a href="#how" class="nav-link text-gray-900">How it works</a>
+                <a href="#features" class="nav-link">Features</a>
+                <a href="#dashboard" class="nav-link">Dashboard</a>
+            </div>
+
+            <div class="flex items-center gap-4">
+                <button class="text-sm font-medium px-4 py-2 hover:text-black transition-colors">Log in</button>
+                <button class="text-sm font-medium bg-black text-white px-5 py-2.5 rounded-full hover:bg-gray-800 transition-all">
+                    Add to Chrome
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <header class="pt-32 pb-20 px-6 hero-pattern">
+        <div class="max-w-4xl mx-auto text-center relative z-10">
+            <div class="inline-block px-3 py-1 bg-white/80 backdrop-blur-sm border border-gray-100 rounded-full text-xs font-semibold tracking-wide uppercase mb-6 shadow-sm">
+                Now in Private Beta
+            </div>
+            <h1 class="text-5xl md:text-7xl font-bold tracking-tight mb-8 leading-[1.1]">
+                End unequal contributions <br>in group projects.
+            </h1>
+            <p class="text-xl text-gray-700 mb-10 max-w-2xl mx-auto leading-relaxed">
+                Taptic tracks real-time participation across all your sites during group projects to ensure everyone contributes fairly.
+            </p>
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <button class="w-full sm:w-auto px-8 py-4 bg-black text-white rounded-xl font-semibold hover:bg-gray-800 transition-all shadow-xl shadow-black/5">
+                    Create a Team
+                </button>
+                <button class="w-full sm:w-auto px-8 py-4 bg-white border border-gray-200 rounded-xl font-semibold hover:bg-gray-50 transition-all">
+                    Team Leader Login
+                </button>
+            </div>
+            
+            <!-- Dashboard & Floating Overlay Combined Mockup -->
+            <div class="mt-20 relative max-w-5xl mx-auto text-left">
+                <!-- Browser Window Shell -->
+                <div class="rounded-xl border border-gray-200/60 bg-[#f8fafc]/90 backdrop-blur-sm shadow-2xl overflow-hidden relative flex flex-col">
+                    <!-- Browser Header -->
+                    <div class="h-12 bg-white border-b border-gray-200/60 flex items-center px-4 gap-4">
+                        <div class="flex gap-1.5">
+                            <div class="w-3 h-3 rounded-full bg-[#ff5f56]"></div>
+                            <div class="w-3 h-3 rounded-full bg-[#ffbd2e]"></div>
+                            <div class="w-3 h-3 rounded-full bg-[#27c93f]"></div>
+                        </div>
+                        <div class="bg-gray-100 rounded-md text-[11px] text-gray-500 px-4 py-1.5 w-64 text-center font-mono truncate hidden sm:block mx-auto border border-gray-200/50">
+                            taptic.live/dashboard
+                        </div>
+                        <div class="w-12 hidden sm:block"></div> <!-- Spacer for balance -->
+                    </div>
+                    
+                    <!-- Browser Body (Dashboard Background) -->
+                    <div class="p-4 md:p-10">
+                        <div class="bg-white rounded-xl shadow-[0_2px_20px_rgb(0,0,0,0.04)] border border-gray-100 p-6 md:p-8 relative">
+                            <h3 class="text-xl font-bold text-gray-900 mb-8">Detailed User Metrics</h3>
+                            
+                            <div class="overflow-x-auto w-full pb-6 mock-scrollbar">
+                                <table class="w-full text-left min-w-[750px]">
+                                    <thead>
+                                        <tr>
+                                            <th class="pb-4 px-2 text-[11px] font-semibold text-gray-400 uppercase tracking-widest border-b border-gray-100">Username</th>
+                                            <th class="pb-4 px-2 text-[11px] font-semibold text-gray-400 uppercase tracking-widest border-b border-gray-100">Role</th>
+                                            <th class="pb-4 px-2 text-[11px] font-semibold text-gray-400 uppercase tracking-widest border-b border-gray-100 text-right">Heartbeats</th>
+                                            <th class="pb-4 px-2 text-[11px] font-semibold text-gray-400 uppercase tracking-widest border-b border-gray-100 text-right">Added</th>
+                                            <th class="pb-4 px-2 text-[11px] font-semibold text-gray-400 uppercase tracking-widest border-b border-gray-100 text-right">Removed</th>
+                                            <th class="pb-4 px-2 text-[11px] font-semibold text-gray-800 uppercase tracking-widest border-b border-gray-100 text-right">Total Activity</th>
+                                            <th class="pb-4 px-2 text-[11px] font-semibold text-gray-400 uppercase tracking-widest border-b border-gray-100 text-right">Efficiency*</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-50/50 text-sm">
+                                        <!-- User 1 -->
+                                        <tr class="group hover:bg-gray-50/50 transition-colors">
+                                            <td class="py-5 px-2">
+                                                <div class="flex items-center gap-3">
+                                                    <div class="w-8 h-8 rounded-full bg-[#10b981] text-white flex items-center justify-center text-[13px] font-bold shadow-sm">je</div>
+                                                    <div>
+                                                        <div class="font-semibold text-gray-900 text-[15px]">Jeremiah</div>
+                                                        <div class="flex items-center gap-1.5 mt-0.5">
+                                                            <div class="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                                                            <span class="text-[11px] text-gray-500 font-medium">Online</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td class="py-5 px-2">
+                                                <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-gray-50 text-gray-600 border border-gray-200/60">Member</span>
+                                            </td>
+                                            <td class="py-5 px-2 text-right text-gray-600 font-medium">325</td>
+                                            <td class="py-5 px-2 text-right text-gray-600 font-medium">3,744</td>
+                                            <td class="py-5 px-2 text-right text-gray-600 font-medium">17</td>
+                                            <td class="py-5 px-2 text-right font-bold text-gray-900 text-[15px]">3,761</td>
+                                            <td class="py-5 px-2 text-right text-gray-500 font-medium">11.57 wpm</td>
+                                        </tr>
+                                        <!-- User 2 -->
+                                        <tr class="group hover:bg-gray-50/50 transition-colors">
+                                            <td class="py-5 px-2">
+                                                <div class="flex items-center gap-3">
+                                                    <div class="w-8 h-8 rounded-full bg-[#6366f1] text-white flex items-center justify-center text-[13px] font-bold shadow-sm">no</div>
+                                                    <div>
+                                                        <div class="font-semibold text-gray-900 text-[15px]">Vivaan</div>
+                                                        <div class="flex items-center gap-1.5 mt-0.5">
+                                                            <div class="w-1.5 h-1.5 rounded-full bg-gray-300"></div>
+                                                            <span class="text-[11px] text-gray-400 font-medium">Offline</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td class="py-5 px-2">
+                                                <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-gray-50 text-gray-600 border border-gray-200/60">Member</span>
+                                            </td>
+                                            <td class="py-5 px-2 text-right text-gray-600 font-medium">0</td>
+                                            <td class="py-5 px-2 text-right text-gray-600 font-medium">0</td>
+                                            <td class="py-5 px-2 text-right text-gray-600 font-medium">0</td>
+                                            <td class="py-5 px-2 text-right font-bold text-gray-900 text-[15px]">0</td>
+                                            <td class="py-5 px-2 text-right text-gray-500 font-medium">0.00 wpm</td>
+                                        </tr>
+                                        <!-- User 3 -->
+                                        <tr class="group hover:bg-gray-50/50 transition-colors">
+                                            <td class="py-5 px-2">
+                                                <div class="flex items-center gap-3">
+                                                    <div class="w-8 h-8 rounded-full bg-[#a855f7] text-white flex items-center justify-center text-[13px] font-bold shadow-sm">vi</div>
+                                                    <div>
+                                                        <div class="font-semibold text-gray-900 text-[15px]">Sarah</div>
+                                                        <div class="flex items-center gap-1.5 mt-0.5">
+                                                            <div class="w-1.5 h-1.5 rounded-full bg-gray-300"></div>
+                                                            <span class="text-[11px] text-gray-400 font-medium">Offline</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td class="py-5 px-2">
+                                                <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-purple-50 text-purple-700 border border-purple-100">Leader</span>
+                                            </td>
+                                            <td class="py-5 px-2 text-right text-gray-600 font-medium">0</td>
+                                            <td class="py-5 px-2 text-right text-gray-600 font-medium">0</td>
+                                            <td class="py-5 px-2 text-right text-gray-600 font-medium">0</td>
+                                            <td class="py-5 px-2 text-right font-bold text-gray-900 text-[15px]">0</td>
+                                            <td class="py-5 px-2 text-right text-gray-500 font-medium">0.00 wpm</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <!-- Scrollbar decoration -->
+                            <div class="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden mb-6 hidden md:block">
+                                <div class="w-3/4 h-full bg-gray-300 rounded-full"></div>
+                            </div>
+                            
+                            <p class="text-[11px] text-gray-400 font-medium">* Efficiency = Total Activity / Heartbeats (Avg Chars per Heartbeat)</p>
+
+                            <!-- Floating Pill Extension Overlay - Attached to the bottom right of the card -->
+                            <div class="absolute -bottom-5 right-2 sm:-bottom-6 sm:-right-4 md:right-8 z-20 w-[90%] sm:w-auto max-w-sm">
+                                <div class="bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-200/80 py-2.5 pl-3 pr-6 flex items-center gap-3 transform transition-all hover:-translate-y-1 hover:shadow-[0_12px_40px_rgb(0,0,0,0.16)]">
+                                    <!-- Status Indicator -->
+                                    <div class="flex items-center justify-center w-8 h-8 rounded-full bg-emerald-50 shrink-0">
+                                        <div class="w-2.5 h-2.5 bg-emerald-500 rounded-full relative"></div>
+                                    </div>
+                                    
+                                    <!-- Text Content -->
+                                    <div class="text-left overflow-hidden">
+                                        <div class="text-[14px] font-bold text-gray-900 leading-tight tracking-tight mb-0.5 truncate">
+                                            jscreator <span class="text-gray-400 font-semibold px-0.5">@</span> vivaansawhneyshlokfanclub <span class="text-gray-400 font-semibold px-0.5">·</span> sent
+                                        </div>
+                                        <div class="text-[12px] text-gray-500 font-medium truncate">
+                                            <span class="text-gray-600">+4 / -0 words</span> <span class="text-gray-300 mx-1">|</span> vivaan0220123j1932dnwaidiaw
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <p class="mt-10 text-sm text-center text-gray-400 italic font-medium relative z-10">Taptic Dashboard & Active Extension (Mockup)</p>
+            </div>
+        </div>
+    </header>
+
+    <!-- Integration Grid -->
+    <section class="py-20 border-t border-gray-100/50 bg-white/40 backdrop-blur-sm relative z-10">
+        <div class="max-w-6xl mx-auto px-6">
+            <p class="text-center text-sm font-bold text-gray-400 uppercase tracking-[0.2em] mb-12">Monitors the tools you already use</p>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-8 grayscale opacity-60">
+                <div class="flex items-center justify-center gap-2">
+                    <span class="font-bold text-xl">GitHub</span>
+                </div>
+                <div class="flex items-center justify-center gap-2">
+                    <span class="font-bold text-xl">Notion</span>
+                </div>
+                <div class="flex items-center justify-center gap-2">
+                    <span class="font-bold text-xl">Google Docs</span>
+                </div>
+                <div class="flex items-center justify-center gap-2">
+                    <span class="font-bold text-xl">Replit</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Core Logic Section -->
+    <section id="how" class="py-24 bg-gray-50/80 backdrop-blur-sm relative z-10 border-t border-gray-100/50">
+        <div class="max-w-6xl mx-auto px-6">
+            <div class="grid md:grid-cols-2 gap-16 items-center">
+                <div>
+                    <h2 class="text-3xl md:text-4xl font-bold mb-6 tracking-tight">Real-time delta tracking.</h2>
+                    <p class="text-lg text-gray-600 mb-8 leading-relaxed">
+                        Taptic doesn't just track time. It calculates active participation deltas—keystrokes, lines of code, and characters added or removed—giving you a true picture of output.
+                    </p>
+                    <ul class="space-y-4">
+                        <li class="flex items-start gap-3">
+                            <div class="mt-1.5 w-1.5 h-1.5 rounded-full bg-black"></div>
+                            <span class="text-gray-700"><strong>Heartbeat Flushes:</strong> Lightweight background updates every 30 seconds.</span>
+                        </li>
+                        <li class="flex items-start gap-3">
+                            <div class="mt-1.5 w-1.5 h-1.5 rounded-full bg-black"></div>
+                            <span class="text-gray-700"><strong>Content Injection:</strong> Native integration into your browser's DOM for accurate measurement.</span>
+                        </li>
+                        <li class="flex items-start gap-3">
+                            <div class="mt-1.5 w-1.5 h-1.5 rounded-full bg-black"></div>
+                            <span class="text-gray-700"><strong>Secure Tokens:</strong> Automated setup links for team members with encrypted authentication.</span>
+                        </li>
+                    </ul>
+                </div>
+                <div class="bg-white/80 backdrop-blur-md p-8 rounded-2xl border border-gray-200 shadow-sm">
+                    <div class="flex items-center justify-between mb-8 pb-4 border-b border-gray-100">
+                        <span class="font-bold">Team Activity</span>
+                        <span class="text-xs text-green-600 font-bold bg-green-50 px-2 py-1 rounded">Live</span>
+                    </div>
+                    <div class="space-y-6">
+                        <div>
+                            <div class="flex justify-between text-sm mb-2">
+                                <span class="font-medium text-gray-500">Sarah (Team Leader)</span>
+                                <span class="font-bold">84% Contribution</span>
+                            </div>
+                            <div class="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div class="w-[84%] h-full bg-black"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-sm mb-2">
+                                <span class="font-medium text-gray-500">Alex</span>
+                                <span class="font-bold">12% Contribution</span>
+                            </div>
+                            <div class="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div class="w-[12%] h-full bg-red-400"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-sm mb-2">
+                                <span class="font-medium text-gray-500">Jordan</span>
+                                <span class="font-bold">4% Contribution</span>
+                            </div>
+                            <div class="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div class="w-[4%] h-full bg-red-600"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="py-24 bg-white/60 backdrop-blur-sm relative z-10">
+        <div class="max-w-6xl mx-auto px-6">
+            <div class="text-center mb-16">
+                <h2 class="text-4xl font-bold tracking-tight mb-4">Powerful moderation tools.</h2>
+                <p class="text-gray-600">Built for team leaders who need to enforce focus.</p>
+            </div>
+            <div class="grid md:grid-cols-3 gap-8">
+                <div class="feature-card p-8 rounded-2xl shadow-sm">
+                    <div class="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center mb-6">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3">Remote Lock</h3>
+                    <p class="text-gray-600 leading-relaxed">Trigger temporary screen-locking reminders on any team member's active browser via WebSockets.</p>
+                </div>
+                <div class="feature-card p-8 rounded-2xl shadow-sm">
+                    <div class="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center mb-6">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3">Live Snapshots</h3>
+                    <p class="text-gray-600 leading-relaxed">Fetch current open tabs or requested window screenshots to ensure deep work is happening on the right platform.</p>
+                </div>
+                <div class="feature-card p-8 rounded-2xl shadow-sm">
+                    <div class="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center mb-6">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3">Visual Analytics</h3>
+                    <p class="text-gray-600 leading-relaxed">Aggregate daily activity charts and historical trends to identify patterns of procrastination or burnout.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="py-24 bg-black text-white text-center relative z-10">
+        <div class="max-w-4xl mx-auto px-6">
+            <h2 class="text-4xl md:text-5xl font-bold mb-8">Ready to build better teams?</h2>
+            <p class="text-xl text-gray-400 mb-10">Start monitoring your next group project for free during our early access period.</p>
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <button class="w-full sm:w-auto px-10 py-4 bg-white text-black rounded-xl font-bold hover:bg-gray-200 transition-all">
+                    Download Chrome Extension
+                </button>
+                <button class="w-full sm:w-auto px-10 py-4 bg-transparent border border-white/20 rounded-xl font-bold hover:bg-white/10 transition-all">
+                    Contact Sales
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="py-12 border-t border-gray-100 bg-white relative z-10">
+        <div class="max-w-6xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-8">
+            <div class="flex items-center gap-2">
+                <div class="w-6 h-6 bg-black rounded flex items-center justify-center">
+                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                </div>
+                <span class="font-bold tracking-tight">Taptic</span>
+            </div>
+            <div class="flex gap-8 text-sm text-gray-500">
+                <a href="#" class="hover:text-black">Privacy</a>
+                <a href="#" class="hover:text-black">Documentation</a>
+                <a href="#" class="hover:text-black">GitHub</a>
+                <a href="#" class="hover:text-black">Twitter</a>
+            </div>
+            <p class="text-sm text-gray-400">© 2024 Taptic Technologies. All rights reserved.</p>
+        </div>
+    </footer>
+
+</body>
+</html>
