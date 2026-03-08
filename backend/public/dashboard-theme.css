@@ -1,86 +1,83 @@
 :root {
-  /* --- Foundation: Deep Charcoal (Less generic blue-black) --- */
-  --color-page-bg: #050505; 
-  --color-surface-1: #0d0d0d; 
-  --color-surface-2: #171717; 
+  /* --- Foundation: Light Theme --- */
+  --color-page-bg: #FAFAFA;
+  --color-surface-1: #ffffff; 
+  --color-surface-2: #f8fafc; 
   
-  /* --- Typography: Sophisticated Contrast --- */
-  --color-text-main: #e5e5e5;
-  --color-text-soft: #b3b3b3;
-  --color-text-muted: #737373;
-  --color-text-strong: #ffffff;
+  /* --- Typography: Light Theme --- */
+  --color-text-main: #334155;
+  --color-text-soft: #475569;
+  --color-text-muted: #64748b;
+  --color-text-strong: #0f172a;
   
-  /* --- Branding: Muted, Sophisticated Earth/Mineral Tones --- */
-  /* Replaced generic Indigo with a "Smoked Teal" */
-  --color-accent: #2dd4bf; 
-  --color-accent-glow: rgba(45, 212, 191, 0.1);
+  /* --- Branding: Deep Blue/Purple for action --- */
+  --color-accent: #6366f1; 
+  --color-accent-glow: rgba(99, 102, 241, 0.1);
 
-  /* --- Glass: Lower Blur, Higher Clarity --- */
-  --color-glass-bg: rgba(255, 255, 255, 0.03);
-  --color-glass-border: rgba(255, 255, 255, 0.06);
-  --color-glass-shadow: rgba(0, 0, 0, 0.4);
+  /* --- Glass: Light frosting --- */
+  --color-glass-bg: rgba(255, 255, 255, 0.75);
+  --color-glass-border: rgba(255, 255, 255, 0.8);
+  --color-glass-shadow: rgba(31, 38, 135, 0.05);
 
-  /* --- KPI: Intentional Color Palette (Not Neons) --- */
-  /* Use muted variants for data, punchy variants only for alerts */
-  --color-kpi-members: #a3a3a3;
-  --color-kpi-heartbeats: #fb7185;
-  --color-kpi-chars: #34d399;
-  --color-kpi-services: #fbbf24;
+  /* --- KPI: Intentional Color Palette --- */
+  --color-kpi-members: #64748b;
+  --color-kpi-pings: #e11d48;
+  --color-kpi-chars: #059669;
+  --color-kpi-services: #d97706;
   
-  /* --- Charting: Professional, Monochromatic/Analogous --- */
-  /* Use shades of a single cool grey-teal for cohesion */
-  --color-chart-line: #2dd4bf;
-  --color-chart-bar-1: #0f766e;
-  --color-chart-bar-2: #115e59;
-  --color-chart-bar-3: #134e4a;
+  /* --- Charting: Light theme --- */
+  --color-chart-line: #6366f1;
+  --color-chart-bar-1: #818cf8;
+  --color-chart-bar-2: #a5b4fc;
+  --color-chart-bar-3: #c7d2fe;
   
   /* --- Interaction --- */
-  --color-input-bg: #0a0a0a;
-  --color-input-border: #262626;
-  --color-input-focus: #2dd4bf;
-  --color-input-border-focus: #2dd4bf;
+  --color-input-bg: #ffffff;
+  --color-input-border: #e2e8f0;
+  --color-input-focus: #6366f1;
+  --color-input-border-focus: #6366f1;
   
-  /* --- Blob Backgrounds (Change these for different colored blur effects) --- */
-  --color-blob-indigo: #4f46e5;
-  --color-blob-teal: #14b8a6;
-  --color-blob-purple: #9333ea;
+  /* --- Blob Backgrounds --- */
+  --color-blob-indigo: #9ec8ff;
+  --color-blob-teal: #d7b2ff;
+  --color-blob-purple: #bacaff;
   
   /* --- Presence Indicators --- */
   --color-presence-online: #10b981;
   --color-presence-offline: #ef4444;
   
   /* --- Screen Button --- */
-  --color-screen-btn-bg: rgba(45, 212, 191, 0.1);
-  --color-screen-btn-bg-hover: rgba(45, 212, 191, 0.2);
-  --color-screen-btn-border: rgba(45, 212, 191, 0.3);
-  --color-screen-btn-text: #2dd4bf;
+  --color-screen-btn-bg: rgba(99, 102, 241, 0.1);
+  --color-screen-btn-bg-hover: rgba(99, 102, 241, 0.15);
+  --color-screen-btn-border: rgba(99, 102, 241, 0.2);
+  --color-screen-btn-text: #4f46e5;
   
   /* --- Modal --- */
-  --color-modal-overlay: rgba(0, 0, 0, 0.75);
+  --color-modal-overlay: rgba(255, 255, 255, 0.6);
   
   /* --- Tags/Pills --- */
-  --color-tag-default-bg: rgba(163, 163, 163, 0.1);
-  --color-tag-default-border: rgba(163, 163, 163, 0.3);
-  --color-tag-leader-bg: rgba(251, 113, 133, 0.15);
-  --color-tag-leader-border: rgba(251, 113, 133, 0.4);
-  --color-kpi-peak: #fb7185;
+  --color-tag-default-bg: rgba(148, 163, 184, 0.1);
+  --color-tag-default-border: rgba(148, 163, 184, 0.2);
+  --color-tag-leader-bg: rgba(99, 102, 241, 0.1);
+  --color-tag-leader-border: rgba(99, 102, 241, 0.2);
+  --color-kpi-peak: #e11d48;
   
   /* --- Alerts --- */
   --color-danger-bg: rgba(239, 68, 68, 0.1);
-  --color-danger-border: rgba(239, 68, 68, 0.3);
-  --color-danger-text: #fca5a5;
+  --color-danger-border: rgba(239, 68, 68, 0.2);
+  --color-danger-text: #b91c1c;
   
   --color-success-bg: rgba(16, 185, 129, 0.1);
-  --color-success-border: rgba(16, 185, 129, 0.3);
-  --color-success-text: #6ee7b7;
+  --color-success-border: rgba(16, 185, 129, 0.2);
+  --color-success-text: #047857;
   
   /* --- Table --- */
-  --color-table-row-hover: rgba(255, 255, 255, 0.03);
+  --color-table-row-hover: rgba(0, 0, 0, 0.02);
   
   /* --- Scrollbar --- */
   --color-scroll-track: transparent;
-  --color-scroll-thumb: rgba(255, 255, 255, 0.1);
-  --color-scroll-thumb-hover: rgba(255, 255, 255, 0.2);
+  --color-scroll-thumb: rgba(0, 0, 0, 0.15);
+  --color-scroll-thumb-hover: rgba(0, 0, 0, 0.25);
   
   --radius-sm: 4px;
   --radius-md: 8px;
@@ -89,6 +86,7 @@
 
 .theme-page {
   background: var(--color-page-bg);
+  background: linear-gradient(135deg, #f8fafc 0%, #FAFAFA 100%);
   color: var(--color-text-main);
 }
 
@@ -112,16 +110,22 @@
 
 .glass-panel {
   background: var(--color-glass-bg);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   border: 1px solid var(--color-glass-border);
-  box-shadow: 0 8px 32px 0 var(--color-glass-shadow);
+  box-shadow: 0 10px 40px 0 var(--color-glass-shadow), inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+}
+
+.glass-panel-inner {
+  background: rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.02);
 }
 
 .blob {
   border-radius: 9999px;
-  mix-blend-mode: screen;
-  filter: blur(150px);
+  mix-blend-mode: normal;
+  filter: blur(80px);
   pointer-events: none;
 }
 
@@ -161,7 +165,7 @@
 .auth-input:focus {
   outline: none;
   border-color: var(--color-input-border-focus);
-  box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.2);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
 }
 
 .presence-icon {
@@ -194,7 +198,7 @@
 
 .screenshot-modal-overlay {
   background: var(--color-modal-overlay);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 

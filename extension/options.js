@@ -40,7 +40,7 @@ function save() {
   };
 
   if (!settings.username || !settings.team || !settings.token) {
-    $status.textContent = "Username, team, and token are all required.";
+    $status.textContent = "Username, team, and secret token are all required.";
     $status.className = "status err";
     return;
   }

@@ -22,9 +22,10 @@ function refresh() {
       credsCard.innerHTML =
         `<div class="cred"><b>User:</b> ${s.username}</div>` +
         `<div class="cred"><b>Team:</b> ${s.team}</div>` +
-        `<div class="cred"><b>Token:</b> ${s.token.slice(0, 8)}...</div>`;
+        `<div class="cred"><b>Token:</b> ${s.token.slice(0, 8)}...</div>` +
+        `<div class="note">Dashboard metrics are shown as words/min where possible.</div>`;
     } else {
-      credsCard.innerHTML = `<p class="warn">No credentials set. Click Settings below to add your username, team, and token.</p>`;
+      credsCard.innerHTML = `<p class="warn">No credentials set. Click Settings below to add your username, team, and secret token.</p>`;
     }
   });
 }

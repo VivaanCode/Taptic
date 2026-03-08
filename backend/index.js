@@ -376,7 +376,7 @@ async function renderErrorPage(title, message) {
 		.replace("__ERROR_MESSAGE__", escapeHtml(message));
 }
 
-const EXTENSION_ID = process.env.EXTENSION_ID || "nhbihphmembphkpkhfoodacaeelhhmai";
+const EXTENSION_ID = process.env.EXTENSION_ID || "klniilncinffnpjkdnocpnbhkhacpkof";
 
 async function renderTeamSuccessPage(teamName, users, serverUrl = "") {
 	const template = await getTeamSuccessTemplate();
@@ -384,9 +384,19 @@ async function renderTeamSuccessPage(teamName, users, serverUrl = "") {
 	const userRows = users
 		.map(
 			(user) => {
-				const autoSetupUrl = `chrome-extension://${EXTENSION_ID}/options.html?username=${encodeURIComponent(user.username)}&team=${encodeURIComponent(teamName)}&token=${encodeURIComponent(user.token)}&serverUrl=${encodeURIComponent(serverUrl)}`;
+				const installUrl = `${serverUrl || "https://taptic.live"}/install?username=${encodeURIComponent(user.username)}&team=${encodeURIComponent(teamName)}&token=${encodeURIComponent(user.token)}&serverUrl=${encodeURIComponent(serverUrl)}`;
+				const safeInstallUrl = escapeHtml(installUrl);
+				const safeToken = escapeHtml(user.token);
+				const isLeader = String(user.role || "").toLowerCase() === "leader";
+
+				const valueMarkup = isLeader
+					? `<code class="text-xs flex-1 min-w-[220px] break-all" style="color: var(--color-accent);">${safeToken}</code>`
+					: `<a href="${safeInstallUrl}" class="text-xs flex-1 min-w-[220px] break-all underline-offset-2 hover:underline" style="color: var(--color-accent);" target="_blank" rel="noopener noreferrer">${safeInstallUrl}</a>`;
+
+				const copyButtonLabel = isLeader ? "Copy Token" : "Copy Link";
+				const copyValue = isLeader ? safeToken : safeInstallUrl;
 				return `
-            <tr class="border-b border-white/10 table-row-hover" style="color: var(--color-text-main);">
+				<tr class="border-b border-black/5 table-row-hover" style="color: var(--color-text-main);">
               <td class="px-4 py-3">${escapeHtml(user.username)}</td>
               <td class="px-4 py-3">
                 <span class="role-pill ${
@@ -398,16 +408,8 @@ async function renderTeamSuccessPage(teamName, users, serverUrl = "") {
               <td class="px-4 py-3">
                 <div class="space-y-2">
                   <div class="flex items-center gap-2 flex-wrap">
-                    <code class="text-xs flex-1 min-w-[200px] break-all" style="color: var(--color-accent);" data-token="${escapeHtml(user.token)}">${escapeHtml(user.token)}</code>
-                    <button type="button" class="copy-token-btn px-2 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap" data-token="${escapeHtml(user.token)}" style="background: var(--color-accent-glow); color: var(--color-accent); border: 1px solid var(--color-accent); cursor: pointer;">Copy</button>
-                  </div>
-                  <p class="text-xs italic" style="color: var(--color-text-muted);">⚠️ This is the last time you will see this token</p>
-                  <div>
-                    <p class="text-xs mb-1" style="color: var(--color-text-muted);">Auto-setup link for team members:</p>
-                    <a href="${autoSetupUrl}" class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors" style="background: var(--color-screen-btn-bg); color: var(--color-screen-btn-text); border: 1px solid var(--color-screen-btn-border);">
-                      <i class="ph ph-download"></i>
-                      Auto-Setup Link
-                    </a>
+	                    ${valueMarkup}
+	                    <button type="button" class="copy-value-btn px-2 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap" data-value="${copyValue}" style="background: var(--color-accent-glow); color: var(--color-accent); border: 1px solid var(--color-accent); cursor: pointer;">${copyButtonLabel}</button>
                   </div>
                 </div>
               </td>
@@ -462,11 +464,11 @@ function serializeForInlineScript(value) {
 async function getTeamDashboardData(teamId) {
 	const summaryResult = await pool.query(
 		`SELECT
-			COUNT(*)::INT AS total_heartbeats,
+			COUNT(*)::INT AS total_pings,
 			COALESCE(SUM(characters_added + characters_removed + characters_modified), 0)::INT AS total_character_changes,
 			COUNT(DISTINCT service)::INT AS services_used,
-			MAX(received_at) AS last_heartbeat_at
-		 FROM heartbeats
+			MAX(received_at) AS last_ping_at
+		 FROM pings
 		 WHERE team_id = $1`,
 		[teamId],
 	);
@@ -475,14 +477,16 @@ async function getTeamDashboardData(teamId) {
 		`SELECT
 			u.username,
 			u.role,
-			COUNT(h.id)::INT AS heartbeat_count,
-			MAX(h.received_at) AS last_heartbeat_at,
+			COUNT(h.id)::INT AS ping_count,
+			MIN(h.received_at) AS first_ping_at,
+			MAX(h.received_at) AS last_ping_at,
+			COALESCE(EXTRACT(EPOCH FROM (MAX(h.received_at) - MIN(h.received_at))) / 60, 0)::FLOAT AS tracked_minutes,
 			COALESCE(SUM(h.characters_added), 0)::INT AS characters_added,
 			COALESCE(SUM(h.characters_removed), 0)::INT AS characters_removed,
 			COALESCE(SUM(h.characters_modified), 0)::INT AS characters_modified,
 			COALESCE(SUM(h.characters_added + h.characters_removed + h.characters_modified), 0)::INT AS total_activity
 		 FROM users u
-		 LEFT JOIN heartbeats h ON h.user_id = u.id
+		 LEFT JOIN pings h ON h.user_id = u.id
 		 WHERE u.team_id = $1
 		 GROUP BY u.id
 		 ORDER BY total_activity DESC, u.username ASC`,
@@ -493,9 +497,9 @@ async function getTeamDashboardData(teamId) {
 		`SELECT
 			TO_CHAR(day::date, 'YYYY-MM-DD') AS day,
 			COALESCE(SUM(h.characters_added + h.characters_removed + h.characters_modified), 0)::INT AS total_activity,
-			COALESCE(COUNT(h.id), 0)::INT AS heartbeat_count
+			COALESCE(COUNT(h.id), 0)::INT AS ping_count
 		 FROM generate_series(CURRENT_DATE - INTERVAL '13 days', CURRENT_DATE, INTERVAL '1 day') AS day
-		 LEFT JOIN heartbeats h
+		 LEFT JOIN pings h
 			ON DATE(h.received_at) = DATE(day)
 			AND h.team_id = $1
 		 GROUP BY day
@@ -564,7 +568,7 @@ async function initializeDatabase() {
 			UNIQUE (team_id, username)
 		);
 
-		CREATE TABLE IF NOT EXISTS heartbeats (
+		CREATE TABLE IF NOT EXISTS pings (
 			id BIGSERIAL PRIMARY KEY,
 			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 			team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
@@ -577,16 +581,16 @@ async function initializeDatabase() {
 		);
 
 		CREATE INDEX IF NOT EXISTS idx_users_team_id ON users(team_id);
-		CREATE INDEX IF NOT EXISTS idx_heartbeats_team_id ON heartbeats(team_id);
-		CREATE INDEX IF NOT EXISTS idx_heartbeats_user_id ON heartbeats(user_id);
-		CREATE INDEX IF NOT EXISTS idx_heartbeats_received_at ON heartbeats(received_at);
+		CREATE INDEX IF NOT EXISTS idx_pings_team_id ON pings(team_id);
+		CREATE INDEX IF NOT EXISTS idx_pings_user_id ON pings(user_id);
+		CREATE INDEX IF NOT EXISTS idx_pings_received_at ON pings(received_at);
 	`);
 
 	await pool.query(`
 		ALTER TABLE teams ADD COLUMN IF NOT EXISTS leader_user_id INTEGER;
 		ALTER TABLE teams ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 		ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
-		ALTER TABLE heartbeats ADD COLUMN IF NOT EXISTS received_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+		ALTER TABLE pings ADD COLUMN IF NOT EXISTS received_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 	`);
 
 	await pool.query(`
@@ -614,6 +618,25 @@ app.get("/", async (req, res) => {
 		console.error("Failed to load home page", error);
 		res.status(500).send(await renderErrorPage("Server Error", "Unable to load the home page right now."));
 	}
+});
+
+app.get("/install", (req, res) => {
+	const { username, team, token, serverUrl } = req.query;
+	if (username && team && token) {
+		const autoSetupUrl =
+			`chrome-extension://${EXTENSION_ID}/options.html?username=` +
+			encodeURIComponent(username) +
+			`&team=` +
+			encodeURIComponent(team) +
+			`&token=` +
+			encodeURIComponent(token) +
+			`&serverUrl=` +
+			encodeURIComponent(serverUrl || `${req.protocol}://${req.get("host")}`);
+		res.redirect(autoSetupUrl);
+		return;
+	}
+
+	res.redirect("https://chromewebstore.google.com/detail/" + EXTENSION_ID);
 });
 
 app.get("/teams/new", async (req, res) => {
@@ -1232,7 +1255,7 @@ io.on("connection", (socket) => {
 		io.emit("message", payload);
 	});
 
-	socket.on("heartbeat", async (payload = {}) => {
+	socket.on("ping", async (payload = {}) => {
 		const username = String(payload.username ?? payload.clientUsername ?? "").trim();
 		const team = String(payload.team ?? payload.clientTeam ?? "").trim();
 		const token = String(payload.token ?? payload.clientToken ?? "").trim();
@@ -1243,18 +1266,18 @@ io.on("connection", (socket) => {
 		const documentName = String(payload.document_name ?? payload.documentName ?? "").trim();
 
 		if (!username || !team || !token || !service) {
-			console.warn(`Invalid heartbeat from ${socket.id}: missing username, team, token, or service`);
+			console.warn(`Invalid ping from ${socket.id}: missing username, team, token, or service`);
 			return;
 		}
 
 		// Input validation
 		if (username.length > 100 || team.length > 100 || service.length > 200) {
-			console.warn(`Invalid heartbeat from ${socket.id}: field too long`);
+			console.warn(`Invalid ping from ${socket.id}: field too long`);
 			return;
 		}
 
 		if (documentName.length > 500) {
-			console.warn(`Invalid heartbeat from ${socket.id}: document name too long`);
+			console.warn(`Invalid ping from ${socket.id}: document name too long`);
 			return;
 		}
 
@@ -1267,13 +1290,13 @@ io.on("connection", (socket) => {
 			charactersRemoved > 1000000 ||
 			charactersModified > 1000000
 		) {
-			console.warn(`Invalid heartbeat from ${socket.id}: character counts out of range`);
+			console.warn(`Invalid ping from ${socket.id}: character counts out of range`);
 			return;
 		}
 
 		if (service === "google_docs" && !documentName) {
 			console.warn(
-				`Invalid heartbeat from ${socket.id}: service is google_docs but document_name is missing`,
+				`Invalid ping from ${socket.id}: service is google_docs but document_name is missing`,
 			);
 			return;
 		}
@@ -1282,7 +1305,7 @@ io.on("connection", (socket) => {
 			const authRow = await authenticateSocketIdentity(username, team, token);
 
 			if (!authRow) {
-				console.warn(`Rejected heartbeat from ${socket.id}: invalid username/token/team combination`);
+				console.warn(`Rejected ping from ${socket.id}: invalid username/token/team combination`);
 				return;
 			}
 
@@ -1302,7 +1325,7 @@ io.on("connection", (socket) => {
 			}
 
 			await pool.query(
-				`INSERT INTO heartbeats(
+				`INSERT INTO pings(
 					user_id,
 					team_id,
 					service,
@@ -1322,7 +1345,7 @@ io.on("connection", (socket) => {
 				],
 			);
 
-			io.emit("heartbeat_saved", {
+			io.emit("ping_saved", {
 				team_id: authRow.team_id,
 				received_at: new Date().toISOString(),
 			});
@@ -1333,11 +1356,11 @@ io.on("connection", (socket) => {
 				charactersModified === 0;
 
 			if (noCharacterChanges) {
-				console.log(`heartbeat received from ${username}`);
+				console.log(`ping received from ${username}`);
 				return;
 			}
 
-			console.log("Heartbeat received:", {
+			console.log("Ping received:", {
 				socketId: socket.id,
 				username,
 				team,
@@ -1348,7 +1371,7 @@ io.on("connection", (socket) => {
 				document_name: documentName || null,
 			});
 		} catch (error) {
-			console.error(`Failed to process heartbeat from ${socket.id}`, error);
+			console.error(`Failed to process ping from ${socket.id}`, error);
 		}
 	});
 
@@ -1415,4 +1438,8 @@ startServer().catch((error) => {
 	console.error("Server startup failed", error);
 	process.exit(1);
 });
+
+
+
+
 

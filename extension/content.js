@@ -218,7 +218,7 @@
       charactersModified: 0
     },
     docName: getDocName(),
-    lastHeartbeatStatus: "waiting",
+    lastPingStatus: "waiting",
     connectionStatus: "disconnected"
   };
 
@@ -294,9 +294,9 @@
         box-shadow: 0 0 0 2px rgba(48, 209, 88, 0.2);
       }
       #taptic-dot.pulse {
-        animation: heartbeatPulse 0.5s cubic-bezier(0.4, 0, 0.6, 1);
+        animation: pingPulse 0.5s cubic-bezier(0.4, 0, 0.6, 1);
       }
-      @keyframes heartbeatPulse {
+      @keyframes pingPulse {
         0%, 100% { transform: scale(1); opacity: 1; }
         50% { transform: scale(1.6); opacity: 0.7; }
       }
@@ -345,7 +345,7 @@
 
     dot.className = overlayState.connectionStatus === "connected" ? "ok" : "";
     status.textContent =
-      `${creds.username} @ ${creds.team} · ${overlayState.lastHeartbeatStatus}`;
+      `${creds.username} @ ${creds.team} · ${overlayState.lastPingStatus}`;
       
     const wordsAdded = Math.max(0, Math.floor(overlayState.visible.charactersAdded / 5));
     const wordsRemoved = Math.max(0, Math.floor(overlayState.visible.charactersRemoved / 5));
@@ -360,7 +360,7 @@
       overlayState = {
         visible: response.visible || overlayState.visible,
         docName: response.docName || getDocName(),
-        lastHeartbeatStatus: response.lastHeartbeatStatus || "waiting",
+        lastPingStatus: response.lastPingStatus || "waiting",
         connectionStatus: response.connectionStatus || "disconnected"
       };
       updateOverlay();
@@ -369,12 +369,12 @@
 
   let consecutiveFailures = 0;
 
-  function flushHeartbeat() {
+  function flushPing() {
     if (!creds) return;
-    sendRuntimeMessage({ type: "flush-heartbeat" }, (res) => {
+    sendRuntimeMessage({ type: "flush-ping" }, (res) => {
       if (res && res.ok && res.sentNow) {
         consecutiveFailures = 0;
-        console.log("Taptic Heartbeat Sent:", res.payload);
+        console.log("Taptic Ping Sent:", res.payload);
         if (overlay) {
           const dot = overlay.querySelector("#taptic-dot");
           if (dot) {
@@ -496,11 +496,11 @@
     loadCreds(() => {
       refreshOverlayState();
       
-      setTimeout(flushHeartbeat, 500);
+      setTimeout(flushPing, 500);
 
       setInterval(() => loadCreds(() => updateOverlay()), 5000);
       setInterval(refreshOverlayState, 500);
-      setInterval(flushHeartbeat, 5000);
+      setInterval(flushPing, 5000);
     });
 
     let reminderModal = null;

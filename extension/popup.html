@@ -5,39 +5,68 @@
   <title>Taptic</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --color-text-main: #334155;
+      --color-text-muted: #64748b;
+      --color-text-strong: #0f172a;
+      --color-accent: #6366f1;
+      --color-accent-strong: #4f46e5;
+      --color-glass-bg: rgba(255, 255, 255, 0.8);
+      --color-glass-border: rgba(255, 255, 255, 0.85);
+      --color-glass-shadow: rgba(31, 38, 135, 0.08);
+      --color-blob-indigo: #dbeafe;
+      --color-blob-teal: #f3e8ff;
+      --color-blob-purple: #e0e7ff;
+    }
     body {
       width: 320px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      background: #f9f9fb;
-      color: #111;
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: linear-gradient(135deg, #f8fafc 0%, #fafafa 100%);
+      color: var(--color-text-main);
       padding: 20px;
+      position: relative;
+      overflow: hidden;
     }
-    .header { text-align: center; color: #111; margin-bottom: 18px; }
+    .blob {
+      position: absolute;
+      border-radius: 999px;
+      filter: blur(70px);
+      opacity: 0.75;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .blob.a { width: 180px; height: 180px; top: -50px; left: -50px; background: var(--color-blob-indigo); }
+    .blob.b { width: 220px; height: 220px; right: -80px; bottom: -90px; background: var(--color-blob-teal); }
+    .shell { position: relative; z-index: 1; }
+    .header { text-align: center; color: var(--color-text-strong); margin-bottom: 18px; }
     .header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.4px; }
-    .header p { font-size: 12px; color: #666; margin-top: 2px; font-weight: 500; }
+    .header p { font-size: 12px; color: var(--color-text-muted); margin-top: 2px; font-weight: 500; }
     .card {
-      background: #fff;
+      background: var(--color-glass-bg);
       border-radius: 14px;
       padding: 16px;
       margin-bottom: 14px;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02);
-      border: 1px solid rgba(0,0,0,0.04);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      box-shadow: 0 10px 30px var(--color-glass-shadow), inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+      border: 1px solid var(--color-glass-border);
     }
     .row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-    .dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; flex-shrink: 0; }
-    .dot.ok { background: #30d158; box-shadow: 0 0 0 2px rgba(48, 209, 88, 0.2); }
-    .dot.err { background: #ff453a; box-shadow: 0 0 0 2px rgba(255, 69, 58, 0.2); }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #e2e8f0; flex-shrink: 0; }
+    .dot.ok { background: #10b981; box-shadow: 0 0 0 2px rgba(48, 209, 88, 0.2); }
+    .dot.err { background: #ef4444; box-shadow: 0 0 0 2px rgba(255, 69, 58, 0.2); }
     .label { font-size: 13px; font-weight: 600; }
-    .mono { font-size: 11px; color: #777; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-    .cred { font-size: 12px; color: #555; margin-bottom: 6px; }
-    .cred b { color: #111; font-weight: 600; }
-    .warn { font-size: 12px; color: #d97706; line-height: 1.4; background: #fffbeb; padding: 8px; border-radius: 8px; }
+    .mono { font-size: 11px; color: #475569; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .cred { font-size: 12px; color: #475569; margin-bottom: 6px; }
+    .cred b { color: var(--color-text-strong); font-weight: 600; }
+    .warn { font-size: 12px; color: #92400e; line-height: 1.4; background: rgba(245, 158, 11, 0.12); padding: 8px; border-radius: 8px; }
+    .note { margin-top: 8px; font-size: 11px; color: var(--color-text-muted); }
     .btn {
       display: block;
       width: 100%;
       padding: 12px;
-      background: #111;
-      color: #fff;
+      background: var(--color-accent);
+      color: #ffffff;
       border: none;
       border-radius: 10px;
       font-size: 13px;
@@ -45,28 +74,32 @@
       cursor: pointer;
       text-align: center;
       transition: all 0.2s ease;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      box-shadow: 0 8px 20px rgba(99, 102, 241, 0.22);
     }
-    .btn:hover { background: #333; transform: translateY(-1px); box-shadow: 0 6px 16px rgba(0,0,0,0.15); }
+    .btn:hover { background: var(--color-accent-strong); transform: translateY(-1px); box-shadow: 0 10px 24px rgba(79, 70, 229, 0.3); }
   </style>
 </head>
 <body>
-  <div class="header">
-    <h1>Taptic</h1>
-    <p>Group Project Tracker</p>
-  </div>
-
-  <div class="card">
-    <div class="row">
-      <div class="dot" id="dot"></div>
-      <span class="label" id="statusText">Checking...</span>
+  <div class="blob a"></div>
+  <div class="blob b"></div>
+  <div class="shell">
+    <div class="header">
+      <h1>Taptic</h1>
+      <p>Group Project Tracker</p>
     </div>
-    <div class="mono" id="socketId"></div>
+
+    <div class="card">
+      <div class="row">
+        <div class="dot" id="dot"></div>
+        <span class="label" id="statusText">Checking...</span>
+      </div>
+      <div class="mono" id="socketId"></div>
+    </div>
+
+    <div class="card" id="credsCard"></div>
+
+    <button class="btn" id="settingsBtn">Open Settings</button>
   </div>
-
-  <div class="card" id="credsCard"></div>
-
-  <button class="btn" id="settingsBtn">Open Settings</button>
 
   <script src="popup.js"></script>
 </body>
