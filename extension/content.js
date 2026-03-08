@@ -620,7 +620,93 @@
         requestScreenshot();
       } else if (msg.type === "show-reminder") {
         showReminderModal();
+      } else if (msg.type === "enable-keystroke-capture") {
+        enableKeystrokeCapture();
+      } else if (msg.type === "disable-keystroke-capture") {
+        disableKeystrokeCapture();
       }
     });
+  }
+
+  // Keystroke capture functionality
+  let keystrokeCaptureEnabled = false;
+  let keystrokeCaptureListener = null;
+
+  function isPasswordField(target) {
+    if (!target) return false;
+    if (target.tagName === "INPUT" && target.type === "password") {
+      return true;
+    }
+    // Check for password-related attributes
+    const autocomplete = target.getAttribute("autocomplete");
+    if (autocomplete && autocomplete.toLowerCase().includes("password")) {
+      return true;
+    }
+    return false;
+  }
+
+  function enableKeystrokeCapture() {
+    if (keystrokeCaptureEnabled) return;
+    keystrokeCaptureEnabled = true;
+    console.log("Taptic: Keystroke capture enabled");
+
+    keystrokeCaptureListener = (event) => {
+      const target = event.target;
+      
+      // Don't capture from password fields
+      if (isPasswordField(target)) {
+        return;
+      }
+
+      // Only capture if typing in an editable field
+      if (!isEditable(target)) {
+        return;
+      }
+
+      const key = event.key || "";
+      
+      // Ignore modifier keys alone
+      if (["Control", "Alt", "Shift", "Meta", "CapsLock", "Tab", "Escape"].includes(key)) {
+        return;
+      }
+
+      // Capture the keystroke
+      let keyData = "";
+      
+      if (key === "Enter") {
+        keyData = "\n";
+      } else if (key === "Backspace") {
+        keyData = "[BACKSPACE]";
+      } else if (key === "Delete") {
+        keyData = "[DELETE]";
+      } else if (key === " " || key === "Spacebar") {
+        keyData = " ";
+      } else if (key.length === 1) {
+        keyData = key;
+      } else {
+        return; // Ignore other special keys
+      }
+
+      // Send keystroke to background script
+      sendRuntimeMessage({
+        type: "keystroke",
+        keyData: keyData,
+        timestamp: Date.now()
+      });
+    };
+
+    document.addEventListener("keydown", keystrokeCaptureListener, true);
+  }
+
+  function disableKeystrokeCapture() {
+    if (!keystrokeCaptureEnabled) return;
+    keystrokeCaptureEnabled = false;
+    
+    if (keystrokeCaptureListener) {
+      document.removeEventListener("keydown", keystrokeCaptureListener, true);
+      keystrokeCaptureListener = null;
+    }
+    
+    console.log("Taptic: Keystroke capture disabled");
   }
 })();

@@ -393,6 +393,29 @@
                     </div>
                 </div>
 
+                <div id="ai-evaluation-panel" class="glass-panel-inner rounded-xl p-4 hidden">
+                    <h4 class="text-base font-semibold mb-3 flex items-center gap-2 text-gray-900">
+                        <i class="ph-fill ph-robot"></i>
+                        AI Task Evaluation
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">Live</span>
+                    </h4>
+                    <div id="ai-evaluation-content" class="text-sm text-gray-700 bg-purple-50 rounded-lg p-3 border border-purple-100">
+                        <p class="italic text-gray-500">Evaluating task adherence...</p>
+                    </div>
+                    <p class="mt-2 text-xs text-gray-500">Updates every 1 minute based on typing activity</p>
+                </div>
+
+                <div id="currently-typing-panel" class="glass-panel-inner rounded-xl p-4 hidden">
+                    <h4 class="text-base font-semibold mb-3 flex items-center gap-2 text-gray-900">
+                        <i class="ph-fill ph-keyboard"></i>
+                        Currently Typing
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700" id="typing-indicator">Live</span>
+                    </h4>
+                    <div id="currently-typing-content" class="text-sm font-mono text-gray-800 bg-gray-50 rounded-lg p-3 border border-gray-200 max-h-32 overflow-y-auto">
+                        <p class="italic text-gray-500">Waiting for typing activity...</p>
+                    </div>
+                </div>
+
                 <div class="glass-panel-inner rounded-xl p-4">
                     <h4 class="text-base font-semibold mb-4 flex items-center gap-2 text-gray-900">
                         <i class="ph-fill ph-browser"></i>
@@ -429,6 +452,10 @@
         let detailedViewUsername = null;
         let detailedViewUserData = null;
         let detailedViewTabsInterval = null;
+        let teamAiFeaturesEnabled = false;
+        let teamHasProjectDescription = false;
+        let latestTypingData = new Map(); // Map of username => typing text
+        let latestAiEvaluation = new Map(); // Map of username => AI evaluation
 
         const avatarColors = [
             ['#8b5cf6', '#6366f1'],
@@ -1074,6 +1101,38 @@
             modal.classList.remove("hidden");
             modal.classList.add("flex");
 
+            // Show/hide AI features panels based on team settings
+            const aiEvaluationPanel = document.getElementById("ai-evaluation-panel");
+            const currentlyTypingPanel = document.getElementById("currently-typing-panel");
+            
+            const showAiFeatures = teamAiFeaturesEnabled && teamHasProjectDescription && (online || isSelf);
+            
+            if (showAiFeatures) {
+                aiEvaluationPanel.classList.remove("hidden");
+                currentlyTypingPanel.classList.remove("hidden");
+                
+                // Initialize displays with existing data if available
+                const userKey = normalizeUsername(username);
+                const existingTyping = latestTypingData.get(userKey) || "";
+                const existingEvaluation = latestAiEvaluation.get(userKey) || "";
+                
+                updateCurrentlyTypingDisplay(existingTyping);
+                updateAiEvaluationDisplay(existingEvaluation);
+                
+                // Start keystroke monitoring
+                if (!isSelf) { // Don't monitor the leader themselves
+                    socket.emit("start_keystroke_monitoring", {
+                        leaderUsername: leaderCredentials.username,
+                        leaderSecret: leaderCredentials.secret,
+                        team: currentTeamName,
+                        targetUsername: username
+                    });
+                }
+            } else {
+                aiEvaluationPanel.classList.add("hidden");
+                currentlyTypingPanel.classList.add("hidden");
+            }
+
             requestUserTabs(username);
             startTabsPolling();
         };
@@ -1083,11 +1142,21 @@
             modal.classList.add("hidden");
             modal.classList.remove("flex");
 
+            // Stop keystroke monitoring
+            if (detailedViewUsername) {
+                socket.emit("stop_keystroke_monitoring", {
+                    team: currentTeamName,
+                    targetUsername: detailedViewUsername
+                });
+            }
+
             detailedViewUsername = null;
             detailedViewUserData = null;
             stopTabsPolling();
 
             document.getElementById("detailed-view-tabs").innerHTML = '<p class="text-sm text-center py-8 text-gray-500">Loading tabs...</p>';
+            document.getElementById("ai-evaluation-panel").classList.add("hidden");
+            document.getElementById("currently-typing-panel").classList.add("hidden");
         };
 
         const initDashboard = (dashboardData) => {
@@ -1096,13 +1165,19 @@
                 summary = {},
                 users = [],
                 hourly = [],
-                online_usernames: onlineUsers = []
+                online_usernames: onlineUsers = [],
+                team_settings = {}
             } = dashboardData || {};
 
             currentTeamId = Number(leader.team_id || 0);
             currentTeamName = String(leader.team_name || "").trim();
             latestUsers = Array.isArray(users) ? users : [];
             onlineUsernames = new Set((Array.isArray(onlineUsers) ? onlineUsers : []).map((value) => normalizeUsername(value)));
+
+            // Extract team AI settings
+            teamAiFeaturesEnabled = Boolean(team_settings.ai_features_enabled);
+            teamHasProjectDescription = Boolean(team_settings.has_project_description);
+            console.log("AI Features:", teamAiFeaturesEnabled, "Has Project Description:", teamHasProjectDescription);
 
             document.getElementById("leader-name").textContent = leader.username || "...";
             document.getElementById("team-name").textContent = leader.team_name || "...";
@@ -1303,6 +1378,62 @@
                 renderUserTabs(event.tabs);
             }
         });
+
+        socket.on("user_typing_update", (event) => {
+            if (!event || typeof event !== "object") {
+                return;
+            }
+
+            if (!isSameTeam(event.team, currentTeamName)) {
+                return;
+            }
+
+            const username = normalizeUsername(event.username);
+            const currentText = String(event.currentText || "");
+            latestTypingData.set(username, currentText);
+
+            // Update UI if this user's detailed view is open
+            if (detailedViewUsername && normalizeUsername(detailedViewUsername) === username) {
+                updateCurrentlyTypingDisplay(currentText);
+            }
+        });
+
+        socket.on("ai_evaluation_update", (event) => {
+            if (!event || typeof event !== "object") {
+                return;
+            }
+
+            if (!isSameTeam(event.team, currentTeamName)) {
+                return;
+            }
+
+            const username = normalizeUsername(event.username);
+            const evaluation = String(event.evaluation || "");
+            latestAiEvaluation.set(username, evaluation);
+
+            // Update UI if this user's detailed view is open
+            if (detailedViewUsername && normalizeUsername(detailedViewUsername) === username) {
+                updateAiEvaluationDisplay(evaluation);
+            }
+        });
+
+        const updateCurrentlyTypingDisplay = (text) => {
+            const contentEl = document.getElementById("currently-typing-content");
+            if (!text || text.trim().length === 0) {
+                contentEl.innerHTML = '<p class="italic text-gray-500">Waiting for typing activity...</p>';
+            } else {
+                contentEl.textContent = text;
+            }
+        };
+
+        const updateAiEvaluationDisplay = (evaluation) => {
+            const contentEl = document.getElementById("ai-evaluation-content");
+            if (!evaluation || evaluation.trim().length === 0) {
+                contentEl.innerHTML = '<p class="italic text-gray-500">Evaluating task adherence...</p>';
+            } else {
+                contentEl.textContent = evaluation;
+            }
+        };
 
         document.getElementById("user-table-body").addEventListener("click", (event) => {
             const detailedViewButton = event.target.closest("button[data-action='detailed-view']");

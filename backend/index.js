@@ -6,6 +6,7 @@ const path = require("path");
 const { Pool } = require("pg");
 const { Server } = require("socket.io");
 const dotenv = require("dotenv");
+const OpenAI = require("openai");
 
 dotenv.config({ path: path.join(__dirname, ".env") });
 
@@ -42,6 +43,17 @@ const sessions = new Map();
 const socketPresenceById = new Map();
 const userSocketsByKey = new Map();
 const pendingTabRequests = new Map();
+
+// Keystroke tracking structures
+const keystrokesByUser = new Map(); // Map of "team::username" => { buffer: string, lastUpdate: timestamp }
+const aiEvaluationsByUser = new Map(); // Map of "team::username" => { evaluation: string, lastEvaluated: timestamp }
+const keystrokeMonitoringActive = new Map(); // Map of "team::username" => boolean (is being monitored by leader)
+
+// OpenAI client for task evaluation
+const openaiClient = new OpenAI({
+	baseURL: 'https://api.featherless.ai/v1',
+	apiKey: process.env.FEATHERLESS_API_KEY || 'FEATHERLESS_API_KEY'
+});
 
 function buildUserPresenceKey(teamName, username) {
 	return `${String(teamName || "").trim().toLowerCase()}::${String(username || "").trim().toLowerCase()}`;
@@ -235,6 +247,59 @@ async function registerSocketPresenceFromCredentials(socket, rawCredentials) {
 	emitPresenceUpdated(metadata, true);
 	return metadata;
 }
+
+async function evaluateTaskWithAI(recentText, projectDescription, username) {
+	try {
+		const response = await openaiClient.chat.completions.create({
+			model: 'Qwen/Qwen2.5-7B-Instruct',
+			messages: [
+				{ 
+					role: 'system', 
+					content: `You are evaluating if a team member is staying on task. The project description describes what they should be working on. Recent text is what they have been typing. Evaluate if they are staying on task. Keep your response under 150 characters. Do not use markdown or any formatting other than unicode characters. Be direct and concise.` 
+				},
+				{ 
+					role: 'user', 
+					content: `Project Description: ${projectDescription}\n\nRecent Activity from ${username}: ${recentText}\n\nAre they staying on task? Provide a brief evaluation.` 
+				}
+			],
+			max_tokens: 100,
+			temperature: 0.7,
+		});
+
+		return response.choices[0].message.content || "Unable to evaluate.";
+	} catch (error) {
+		console.error("AI evaluation error:", error);
+		return "AI evaluation error.";
+	}
+}
+
+function getUserKey(team, username) {
+	return `${String(team || "").trim().toLowerCase()}::${String(username || "").trim().toLowerCase()}`;
+}
+
+function startKeystrokeMonitoring(team, username) {
+	const key = getUserKey(team, username);
+	keystrokeMonitoringActive.set(key, true);
+	
+	if (!keystrokesByUser.has(key)) {
+		keystrokesByUser.set(key, {
+			buffer: "",
+			lastUpdate: Date.now()
+		});
+	}
+	
+	console.log(`Started keystroke monitoring for ${username} in team ${team}`);
+}
+
+function stopKeystrokeMonitoring(team, username) {
+	const key = getUserKey(team, username);
+	keystrokeMonitoringActive.delete(key);
+	keystrokesByUser.delete(key);
+	aiEvaluationsByUser.delete(key);
+	
+	console.log(`Stopped keystroke monitoring for ${username} in team ${team}`);
+}
+
 
 function normalizeDatabaseUrl(rawValue) {
 	if (!rawValue) {
@@ -608,6 +673,9 @@ async function initializeDatabase() {
 	await pool.query(`
 		ALTER TABLE teams ADD COLUMN IF NOT EXISTS leader_user_id INTEGER;
 		ALTER TABLE teams ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+		ALTER TABLE teams ADD COLUMN IF NOT EXISTS project_description TEXT;
+		ALTER TABLE teams ADD COLUMN IF NOT EXISTS ai_features_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+		ALTER TABLE teams ADD COLUMN IF NOT EXISTS keystroke_recording_enabled BOOLEAN NOT NULL DEFAULT TRUE;
 		ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 		ALTER TABLE pings ADD COLUMN IF NOT EXISTS received_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 	`);
@@ -674,6 +742,9 @@ app.post("/teams/new", async (req, res) => {
 	const teamName = String(req.body.team_name || "").trim();
 	const leaderUsername = String(req.body.leader_username || "").trim();
 	const memberUsernamesText = String(req.body.member_usernames || "");
+	const projectDescription = String(req.body.project_description || "").trim();
+	const aiFeaturesEnabled = req.body.ai_features_enabled !== "false"; // Checkbox value
+	const keystrokeRecordingEnabled = aiFeaturesEnabled; // Same as AI features
 
 	if (!teamName || !leaderUsername) {
 		res
@@ -772,8 +843,8 @@ app.post("/teams/new", async (req, res) => {
 		await client.query("BEGIN");
 
 		const teamResult = await client.query(
-			"INSERT INTO teams(name) VALUES($1) RETURNING id, name",
-			[teamName],
+			"INSERT INTO teams(name, project_description, ai_features_enabled, keystroke_recording_enabled) VALUES($1, $2, $3, $4) RETURNING id, name",
+			[teamName, projectDescription || null, aiFeaturesEnabled, keystrokeRecordingEnabled],
 		);
 		const team = teamResult.rows[0];
 
@@ -901,7 +972,8 @@ app.post("/api/team-info", async (req, res) => {
 		}
 
 		const leaderResult = await pool.query(
-			`SELECT u.id, u.username, u.team_id, t.name AS team_name
+			`SELECT u.id, u.username, u.team_id, t.name AS team_name, t.ai_features_enabled, 
+			        t.keystroke_recording_enabled, t.project_description
 			 FROM users u
 			 JOIN teams t ON t.id = u.team_id
 			 WHERE u.username = $1 AND u.token = $2 AND u.role = 'leader'`,
@@ -922,6 +994,11 @@ app.post("/api/team-info", async (req, res) => {
 				username: leader.username,
 				team_id: leader.team_id,
 				team_name: leader.team_name,
+			},
+			team_settings: {
+				ai_features_enabled: Boolean(leader.ai_features_enabled),
+				keystroke_recording_enabled: Boolean(leader.keystroke_recording_enabled),
+				has_project_description: Boolean(leader.project_description),
 			},
 			summary: dashboardData.summary,
 			users: dashboardData.users,
@@ -1394,6 +1471,143 @@ io.on("connection", (socket) => {
 		}
 	});
 
+	socket.on("start_keystroke_monitoring", async (payload = {}) => {
+		const leaderUsername = String(payload.leaderUsername || "").trim();
+		const leaderSecret = String(payload.leaderSecret || "").trim();
+		const team = String(payload.team || "").trim();
+		const targetUsername = String(payload.targetUsername || "").trim();
+
+		if (!leaderUsername || !leaderSecret || !team || !targetUsername) {
+			return;
+		}
+
+		try {
+			const leaderCheck = await pool.query(
+				`SELECT u.id, t.ai_features_enabled, t.keystroke_recording_enabled, t.project_description
+				 FROM users u
+				 JOIN teams t ON t.id = u.team_id
+				 WHERE u.username = $1
+				   AND u.token = $2
+				   AND u.role = 'leader'
+				   AND t.name = $3`,
+				[leaderUsername, leaderSecret, team],
+			);
+
+			if (leaderCheck.rowCount === 0) {
+				socket.emit("keystroke_monitoring_status", {
+					status: "error",
+					error: "Invalid leader credentials",
+					targetUsername,
+				});
+				return;
+			}
+
+			const teamData = leaderCheck.rows[0];
+
+			if (!teamData.ai_features_enabled || !teamData.keystroke_recording_enabled || !teamData.project_description) {
+				socket.emit("keystroke_monitoring_status", {
+					status: "disabled",
+					targetUsername,
+					message: "AI features, keystroke recording, or project description not configured",
+				});
+				return;
+			}
+
+			startKeystrokeMonitoring(team, targetUsername);
+
+			const onlineSocketIds = getOnlineSocketIdsForUser(team, targetUsername);
+			for (const targetSocketId of onlineSocketIds) {
+				io.to(targetSocketId).emit("enable_keystroke_capture", {
+					team,
+					targetUsername,
+				});
+			}
+
+			socket.emit("keystroke_monitoring_status", {
+				status: "started",
+				targetUsername,
+			});
+		} catch (error) {
+			console.error("Start keystroke monitoring error", error);
+			socket.emit("keystroke_monitoring_status", {
+				status: "error",
+				error: "Unable to start keystroke monitoring",
+				targetUsername,
+			});
+		}
+	});
+
+	socket.on("stop_keystroke_monitoring", async (payload = {}) => {
+		const team = String(payload.team || "").trim();
+		const targetUsername = String(payload.targetUsername || "").trim();
+
+		if (!team || !targetUsername) {
+			return;
+		}
+
+		stopKeystrokeMonitoring(team, targetUsername);
+
+		const onlineSocketIds = getOnlineSocketIdsForUser(team, targetUsername);
+		for (const targetSocketId of onlineSocketIds) {
+			io.to(targetSocketId).emit("disable_keystroke_capture", {
+				team,
+				targetUsername,
+			});
+		}
+
+		socket.emit("keystroke_monitoring_stopped", {
+			status: "stopped",
+			targetUsername,
+		});
+	});
+
+	socket.on("keystroke_data", async (payload = {}) => {
+		const username = String(payload.username || "").trim();
+		const team = String(payload.team || "").trim();
+		const token = String(payload.token || "").trim();
+		const keyData = String(payload.keyData || "").trim();
+
+		if (!username || !team || !token || !keyData) {
+			return;
+		}
+
+		try {
+			const authRow = await authenticateSocketIdentity(username, team, token);
+			if (!authRow) {
+				return;
+			}
+
+			const key = getUserKey(team, username);
+			
+			if (!keystrokeMonitoringActive.get(key)) {
+				return; // Not being monitored, ignore
+			}
+
+			const keystrokeData = keystrokesByUser.get(key) || { buffer: "", lastUpdate: Date.now() };
+			
+			// Append keystroke to buffer
+			keystrokeData.buffer += keyData;
+			keystrokeData.lastUpdate = Date.now();
+			
+			// Keep buffer to last 2000 characters to avoid memory issues
+			if (keystrokeData.buffer.length > 2000) {
+				keystrokeData.buffer = keystrokeData.buffer.slice(-2000);
+			}
+			
+			keystrokesByUser.set(key, keystrokeData);
+
+			// Broadcast current typing to dashboard viewers
+			io.emit("user_typing_update", {
+				team,
+				username,
+				currentText: keystrokeData.buffer.slice(-200), // Send last 200 chars
+				timestamp: Date.now(),
+			});
+		} catch (error) {
+			console.error("Keystroke data error", error);
+		}
+	});
+
 	socket.on("disconnect", () => {
 		const removed = removeSocketPresence(socket.id);
 		emitPresenceUpdated(removed, false);
@@ -1445,6 +1659,69 @@ setInterval(() => {
 		console.log(`Cleaned up ${expiredRequests.length} expired tab requests`);
 	}
 }, 5 * 60 * 1000);
+
+// AI evaluation loop - runs every 1 minute
+setInterval(async () => {
+	const now = Date.now();
+	
+	for (const [userKey, keystrokeData] of keystrokesByUser.entries()) {
+		if (!keystrokeMonitoringActive.get(userKey)) {
+			continue; // Not being monitored
+		}
+		
+		const lastEval = aiEvaluationsByUser.get(userKey);
+		
+		// Only evaluate if there's new content and at least 1 minute since last eval
+		if (keystrokeData.buffer.length < 50) {
+			continue; // Not enough data yet
+		}
+		
+		if (lastEval && (now - lastEval.lastEvaluated) < 60000) {
+			continue; // Evaluated less than 1 minute ago
+		}
+		
+		// Parse team and username from key
+		const [team, username] = userKey.split("::");
+		
+		try {
+			// Get project description for this team
+			const teamResult = await pool.query(
+				`SELECT project_description FROM teams WHERE LOWER(name) = LOWER($1)`,
+				[team],
+			);
+			
+			if (teamResult.rowCount === 0 || !teamResult.rows[0].project_description) {
+				continue;
+			}
+			
+			const projectDescription = teamResult.rows[0].project_description;
+			
+			// Get last 500 characters for evaluation
+			const recentText = keystrokeData.buffer.slice(-500);
+			
+			console.log(`Evaluating ${username} in team ${team}...`);
+			
+			const evaluation = await evaluateTaskWithAI(recentText, projectDescription, username);
+			
+			aiEvaluationsByUser.set(userKey, {
+				evaluation,
+				lastEvaluated: now,
+			});
+			
+			// Broadcast evaluation to dashboard
+			io.emit("ai_evaluation_update", {
+				team,
+				username,
+				evaluation,
+				timestamp: now,
+			});
+			
+			console.log(`AI evaluation for ${username}: ${evaluation}`);
+		} catch (error) {
+			console.error(`AI evaluation failed for ${userKey}`, error);
+		}
+	}
+}, 60 * 1000); // Every 1 minute
 
 async function startServer() {
 	await initializeDatabase();

@@ -74,6 +74,37 @@
           ></textarea>
         </label>
 
+        <label class="text-sm" style="color: var(--color-text-soft);">
+          Project Description
+          <small class="block" style="color: var(--color-text-muted);">
+            (Detailed description of what the team should be working on - used by AI to evaluate if members are staying on task)
+          </small>
+          <textarea
+            name="project_description"
+            id="project-description"
+            rows="5"
+            class="auth-input mt-2 w-full rounded-lg px-3 py-2 resize-none"
+            placeholder="Describe in detail what this team should be working on, the goals, technologies being used, etc. Be as descriptive as possible for accurate AI evaluation."
+            autocomplete="off"
+          ></textarea>
+        </label>
+
+        <label class="flex items-start gap-3 text-sm cursor-pointer" style="color: var(--color-text-soft);">
+          <input
+            type="checkbox"
+            id="ai-features-opt-out"
+            name="ai_features_enabled"
+            value="false"
+            class="mt-1"
+          />
+          <span>
+            <strong>Opt out of AI features and keystroke recording</strong>
+            <small class="block mt-1" style="color: var(--color-text-muted);">
+              If checked, you will not have access to AI-powered task monitoring, keystroke recording, or real-time typing visibility.
+            </small>
+          </span>
+        </label>
+
         <button
           type="submit"
           class="mt-2 bg-black/5 hover:bg-black/10 transition-colors border border-black/5 text-slate-700 rounded-lg px-4 py-3 font-medium flex items-center justify-center gap-2"
@@ -92,5 +123,72 @@
       </p>
     </section>
   </main>
+
+  <!-- Warning Modal for opting out of AI features -->
+  <div id="opt-out-warning-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background: rgba(17, 24, 39, 0.5); backdrop-filter: blur(4px);">
+    <div class="glass-panel w-full max-w-md rounded-2xl p-6 sm:p-8" style="border: 1px solid #e5e7eb; background: rgba(255, 255, 255, 0.95);">
+      <div class="mb-4">
+        <h2 class="text-2xl font-bold flex items-center gap-2" style="color: var(--color-text-strong);">
+          <i class="ph-fill ph-warning text-yellow-500"></i>
+          AI Features Disabled
+        </h2>
+        <p class="mt-3 text-sm" style="color: var(--color-text-main);">
+          By opting out of AI features and keystroke recording, you will <strong>not have access to:</strong>
+        </p>
+        <ul class="mt-3 text-sm list-disc list-inside space-y-1" style="color: var(--color-text-main);">
+          <li>Real-time visibility of what team members are typing</li>
+          <li>AI-powered task evaluation and on-task monitoring</li>
+          <li>Keystroke recording and analysis</li>
+          <li>Advanced productivity insights</li>
+        </ul>
+        <p class="mt-3 text-sm" style="color: var(--color-text-muted);">
+          Are you sure you want to continue without these features?
+        </p>
+      </div>
+      <div class="flex gap-3">
+        <button
+          type="button"
+          id="cancel-opt-out"
+          class="flex-1 bg-black hover:bg-gray-800 transition-colors text-white rounded-lg px-4 py-2 font-medium"
+        >
+          Keep AI Features
+        </button>
+        <button
+          type="button"
+          id="confirm-opt-out"
+          class="flex-1 bg-gray-200 hover:bg-gray-300 transition-colors text-gray-700 rounded-lg px-4 py-2 font-medium"
+        >
+          Continue Without AI
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const form = document.querySelector('form');
+    const optOutCheckbox = document.getElementById('ai-features-opt-out');
+    const modal = document.getElementById('opt-out-warning-modal');
+    const cancelOptOutBtn = document.getElementById('cancel-opt-out');
+    const confirmOptOutBtn = document.getElementById('confirm-opt-out');
+    let formSubmitPending = false;
+
+    form.addEventListener('submit', (e) => {
+      if (optOutCheckbox.checked && !formSubmitPending) {
+        e.preventDefault();
+        modal.classList.remove('hidden');
+      }
+    });
+
+    cancelOptOutBtn.addEventListener('click', () => {
+      optOutCheckbox.checked = false;
+      modal.classList.add('hidden');
+    });
+
+    confirmOptOutBtn.addEventListener('click', () => {
+      modal.classList.add('hidden');
+      formSubmitPending = true;
+      form.submit();
+    });
+  </script>
 </body>
 </html>

